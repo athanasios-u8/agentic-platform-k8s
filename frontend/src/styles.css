@@ -1,0 +1,333 @@
+:root {
+  color-scheme: light;
+  --ink: #202428;
+  --muted: #66717d;
+  --line: #d7dde3;
+  --surface: #ffffff;
+  --soft: #f5f7f8;
+  --accent: #1f7a64;
+  --accent-strong: #155f4d;
+  --warn: #9b4d13;
+  --blue: #245c9a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--soft);
+  overflow: hidden;
+}
+
+button,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+select {
+  min-height: 38px;
+}
+
+button {
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--accent-strong);
+}
+
+button.secondary,
+.starter-list button,
+.icon-button {
+  background: #fff;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 0;
+}
+
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: 20px;
+  overflow: auto;
+}
+
+.brand {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: var(--blue);
+  color: #fff;
+  font-weight: 800;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 15px;
+}
+
+.brand p,
+.empty-state {
+  color: var(--muted);
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.field-label {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+}
+
+select {
+  padding: 8px 10px;
+}
+
+.starter-list {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 24px;
+}
+
+.starter-list button {
+  text-align: left;
+}
+
+.conversation {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.messages {
+  min-height: 0;
+  padding: 24px;
+  overflow: auto;
+}
+
+.turn {
+  max-width: 820px;
+  margin: 0 auto 18px;
+}
+
+.turn:last-child {
+  margin-bottom: 24px;
+}
+
+.message {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 13px 14px;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+
+.message.user {
+  margin-left: auto;
+  max-width: 640px;
+  border-color: #b9d7ce;
+  background: #edf8f4;
+}
+
+.message.assistant {
+  max-width: 760px;
+}
+
+.run-timeline {
+  width: min(640px, 100%);
+  margin: -2px 0 12px auto;
+}
+
+.run-timeline-header {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 6px 2px;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+textarea {
+  resize: vertical;
+  padding: 10px 12px;
+  min-height: 66px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.approval-list,
+.run-steps {
+  display: grid;
+  gap: 6px;
+}
+
+.approval-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.approval-card p {
+  color: var(--muted);
+  margin: 7px 0 10px;
+  line-height: 1.4;
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.run-step {
+  border: 1px solid #d9e5e0;
+  border-radius: 7px;
+  background: #f8fbfa;
+  overflow: hidden;
+}
+
+.run-step summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.run-step summary::-webkit-details-marker {
+  display: none;
+}
+
+.run-step summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  flex: 0 0 auto;
+}
+
+.run-step-title {
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: lowercase;
+}
+
+.run-step-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.run-step pre {
+  max-height: 220px;
+  overflow: auto;
+  padding: 10px;
+  border-top: 1px solid #d9e5e0;
+  background: #fff;
+}
+
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #34404b;
+}
+
+@media (max-width: 1040px) {
+  .app-shell {
+    grid-template-columns: 260px 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    max-height: 42vh;
+  }
+
+  .composer {
+    grid-template-columns: 1fr;
+  }
+}

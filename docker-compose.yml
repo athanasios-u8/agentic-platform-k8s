@@ -1,0 +1,271 @@
+x-backend-env: &backend-env
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
+  OPENAI_TRACING_ENABLED: ${OPENAI_TRACING_ENABLED:-true}
+  DATABASE_URL: ${DATABASE_URL:-postgresql://bookstore:bookstore@postgres:5432/bookstore}
+  CATALOG_MCP_URL: ${CATALOG_MCP_URL:-http://catalog-mcp:8101/mcp}
+  CUSTOMER_MCP_URL: ${CUSTOMER_MCP_URL:-http://customer-mcp:8102/mcp}
+  STORE_OPERATIONS_MCP_URL: ${STORE_OPERATIONS_MCP_URL:-http://store-operations-mcp:8103/mcp}
+  CUSTOMER_CONCIERGE_AGENT_URL: ${CUSTOMER_CONCIERGE_AGENT_URL:-http://customer-concierge-agent:8201}
+  STORE_MANAGER_AGENT_URL: ${STORE_MANAGER_AGENT_URL:-http://store-manager-agent:8202}
+  CATALOG_SPECIALIST_AGENT_URL: ${CATALOG_SPECIALIST_AGENT_URL:-http://catalog-specialist-agent:8203}
+  RESERVATION_SPECIALIST_AGENT_URL: ${RESERVATION_SPECIALIST_AGENT_URL:-http://reservation-specialist-agent:8204}
+  MESSAGE_DRAFTER_AGENT_URL: ${MESSAGE_DRAFTER_AGENT_URL:-http://message-drafter-agent:8205}
+  APPROVAL_REQUIRED_FOR_WRITES: ${APPROVAL_REQUIRED_FOR_WRITES:-true}
+  APPROVAL_STATE_STORE: ${APPROVAL_STATE_STORE:-postgres}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bookstore}
+      POSTGRES_USER: ${POSTGRES_USER:-bookstore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bookstore}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - bookstore-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bookstore} -d ${POSTGRES_DB:-bookstore}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  bookstore-cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - cli
+    command: [".venv/bin/python", "-m", "scripts.reset_demo_data"]
+
+  catalog-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${CATALOG_MCP_HOST_PORT:-8101}:8101"
+    command: [".venv/bin/python", "-m", "bookstore_agents.mcp_servers.catalog.server"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8101/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  customer-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${CUSTOMER_MCP_HOST_PORT:-8102}:8102"
+    command: [".venv/bin/python", "-m", "bookstore_agents.mcp_servers.customer.server"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8102/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  store-operations-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${STORE_OPERATIONS_MCP_HOST_PORT:-8103}:8103"
+    command: [".venv/bin/python", "-m", "bookstore_agents.mcp_servers.store_operations.server"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8103/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  catalog-specialist-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      catalog-mcp:
+        condition: service_healthy
+    ports:
+      - "${CATALOG_SPECIALIST_AGENT_HOST_PORT:-8203}:8203"
+    command: [".venv/bin/python", "-m", "bookstore_agents.agents.catalog_specialist.server"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8203/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  reservation-specialist-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      store-operations-mcp:
+        condition: service_healthy
+      customer-mcp:
+        condition: service_healthy
+    ports:
+      - "${RESERVATION_SPECIALIST_AGENT_HOST_PORT:-8204}:8204"
+    command: [".venv/bin/python", "-m", "bookstore_agents.agents.reservation_specialist.server"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8204/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  message-drafter-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    ports:
+      - "${MESSAGE_DRAFTER_AGENT_HOST_PORT:-8205}:8205"
+    command: [".venv/bin/python", "-m", "bookstore_agents.agents.message_drafter.server"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8205/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  customer-concierge-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      catalog-specialist-agent:
+        condition: service_healthy
+      reservation-specialist-agent:
+        condition: service_healthy
+      message-drafter-agent:
+        condition: service_healthy
+    ports:
+      - "${CUSTOMER_CONCIERGE_AGENT_HOST_PORT:-8201}:8201"
+    command: [".venv/bin/python", "-m", "bookstore_agents.agents.customer_concierge.server"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8201/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  store-manager-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      catalog-specialist-agent:
+        condition: service_healthy
+      reservation-specialist-agent:
+        condition: service_healthy
+      message-drafter-agent:
+        condition: service_healthy
+      store-operations-mcp:
+        condition: service_healthy
+    ports:
+      - "${STORE_MANAGER_AGENT_HOST_PORT:-8202}:8202"
+    command: [".venv/bin/python", "-m", "bookstore_agents.agents.store_manager.server"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8202/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  frontend-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      <<: *backend-env
+    depends_on:
+      customer-concierge-agent:
+        condition: service_healthy
+      store-manager-agent:
+        condition: service_healthy
+      catalog-specialist-agent:
+        condition: service_healthy
+      reservation-specialist-agent:
+        condition: service_healthy
+      message-drafter-agent:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_GATEWAY_HOST_PORT:-8300}:8300"
+    command: [".venv/bin/python", "-m", "bookstore_agents.frontend_gateway.server"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8300/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    environment:
+      FRONTEND_GATEWAY_PUBLIC_URL: ${FRONTEND_GATEWAY_PUBLIC_URL:-http://localhost:8300}
+      CHATKIT_API_PATH: ${CHATKIT_API_PATH:-/chatkit}
+    depends_on:
+      frontend-gateway:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_HOST_PORT:-3000}:80"
+
+volumes:
+  bookstore-postgres:
