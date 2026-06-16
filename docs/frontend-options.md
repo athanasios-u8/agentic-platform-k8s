@@ -8,7 +8,7 @@ As of June 16, 2026, the recommended OpenAI-native path is to use the OpenAI Age
 
 ## Recommendation
 
-Use OpenAI ChatKit with a custom Python server.
+Use a ChatKit-oriented custom Python server with a lightweight browser UI.
 
 Decision: selected for implementation.
 
@@ -17,8 +17,9 @@ This means:
 - Backend agents use the OpenAI Agents SDK.
 - Agents remain independently callable over A2A.
 - The frontend gateway routes user messages to the selected A2A agent.
-- ChatKit streams responses back to the browser.
-- Approval requests appear as UI cards, forms, or actions.
+- The current browser UI consumes the gateway's `/chat` NDJSON stream.
+- The gateway also exposes `/chatkit` as an SSE adapter for ChatKit-style integrations.
+- Approval requests appear as sidebar cards in the current UI.
 - The browser-facing frontend is built and run as its own Docker service.
 
 This path gives the demo a polished chat interface without moving orchestration out of our Python backend.
@@ -27,10 +28,17 @@ This path gives the demo a polished chat interface without moving orchestration 
 
 Use two frontend-related services:
 
-- `frontend-gateway`: Python service that implements the ChatKit custom server endpoint and routes messages to A2A agents.
-- `frontend`: browser-facing ChatKit app, served from its own Docker container.
+- `frontend-gateway`: Python service that exposes `/chat`, `/chatkit`, agent discovery, and approval routes.
+- `frontend`: browser-facing static app, served from its own Docker container.
 
 The `frontend` service should not receive `OPENAI_API_KEY`, database credentials, or direct MCP credentials. It should only know the public URL/path of `frontend-gateway`.
+
+Current UI behavior:
+
+- Agent selection is independent and clears the visible chat transcript when changed.
+- Run timeline steps render inline below the user message that started the run.
+- Long conversations scroll inside the conversation pane.
+- Pending approvals are shown in the sidebar and can be approved or rejected from there.
 
 ## AgentKit Clarification
 
@@ -39,7 +47,7 @@ AgentKit can be useful as an umbrella for OpenAI agent-building capabilities, es
 For this project:
 
 - Use the OpenAI Agents SDK for agent logic, model calls, tool choice, streaming, and approvals.
-- Use ChatKit custom server integration for the frontend.
+- Use the ChatKit-oriented custom server integration path for the frontend gateway.
 - Avoid Agent Builder-hosted workflows for new implementation work. OpenAI documentation says Agent Builder is in a transition window and is scheduled to shut down on November 30, 2026.
 
 ## Option A: ChatKit Custom Server
@@ -131,6 +139,10 @@ Cons:
 Start with Option A: ChatKit custom server.
 
 Status: accepted.
+
+Implementation status: the repository currently ships a static frontend that uses
+the gateway's `/chat` stream directly, plus a `/chatkit` SSE adapter that keeps
+the gateway aligned with the selected ChatKit direction.
 
 Keep the event adapter modular so AG-UI can be added later if we decide the demo needs a more explicit protocol-level visualization of A2A and MCP activity.
 

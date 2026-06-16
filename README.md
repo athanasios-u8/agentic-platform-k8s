@@ -49,7 +49,7 @@ http://localhost:8300
 
 ## Services
 
-| Service | Port | Purpose |
+| Service | Default host port | Purpose |
 |---|---:|---|
 | `catalog-mcp` | 8101 | Book search and recommendations |
 | `customer-mcp` | 8102 | Customer profiles and preferences |
@@ -61,6 +61,43 @@ http://localhost:8300
 | `message-drafter-agent` | 8205 | No-tool drafting subagent |
 | `frontend-gateway` | 8300 | ChatKit gateway and approval routes |
 | `frontend` | 3000 | Browser UI |
+
+The host port can be changed with the matching `*_HOST_PORT` variable while the
+service keeps its internal container port. For example,
+`CATALOG_MCP_HOST_PORT=18101` publishes the Catalog MCP server on host port
+`18101` while other containers still reach it at `catalog-mcp:8101`.
+
+## Browser UI
+
+The frontend lets you select any of the five agents and send messages through
+the `frontend-gateway`. The active run timeline appears inline below each user
+message, so longer conversations scroll inside the conversation pane instead of
+creating a second page-level timeline. Changing the selected agent clears the
+current chat transcript.
+
+Pending write approvals appear in the sidebar. Approving or rejecting a card
+calls the gateway approval route and refreshes the pending approval list.
+
+## Write And Approval Flow
+
+Mutating MCP tools do not write immediately during normal agent runs. The agent
+creates a pending approval and returns an `approval_required` event instead.
+
+Approval-gated tools:
+
+- `create_reservation`
+- `cancel_reservation`
+- `mark_reservation_picked_up`
+- `adjust_inventory`
+- `update_customer_preferences`
+
+When an approval is accepted, `frontend-gateway` executes the underlying write
+tool and stores the `approval_id` with the database update. If the approval is
+rejected, no database mutation is performed.
+
+Today's pickup queue only returns active reservations. After a cancellation or
+pickup completion is approved, that reservation no longer appears in the
+pickup queue.
 
 ## Notes
 

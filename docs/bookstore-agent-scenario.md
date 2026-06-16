@@ -28,10 +28,10 @@ Use three MCP servers. This keeps the demo simple while still showing clear capa
 
 | Agent | Type | Independently callable? | MCP tools | What it does |
 |---|---:|---:|---|---|
-| Customer Concierge | Master agent | Yes | Catalog MCP, Store Operations MCP, Customer MCP | Helps customers find books, checks availability, creates reservations, and produces customer-facing answers. |
-| Store Manager | Master agent | Yes | Catalog MCP, Store Operations MCP | Gives staff daily summaries, flags low stock, reviews sales, and highlights reservation and pickup workload. |
+| Customer Concierge | Master agent | Yes | Catalog MCP, Store Operations MCP, Customer MCP | Helps customers find books, checks availability, prepares reservations for approval, and produces customer-facing answers. |
+| Store Manager | Master agent | Yes | Catalog MCP, Store Operations MCP | Gives staff daily summaries, flags low stock, reviews sales, highlights pickup workload, and prepares pickup status updates for approval. |
 | Catalog Specialist | Subagent | Yes | Catalog MCP | Searches and recommends books based on genre, budget, author, age range, mood, popularity, or availability constraints. |
-| Reservation Specialist | Subagent | Yes | Store Operations MCP, Customer MCP | Creates, updates, cancels, and reviews reservations; checks whether a customer has existing pickups or loyalty benefits. |
+| Reservation Specialist | Subagent | Yes | Store Operations MCP, Customer MCP | Creates, updates, cancels, and reviews reservations through approval-gated write flows; checks whether a customer has existing pickups or loyalty benefits. |
 | Message Drafter | Subagent | Yes | No tools | Turns supplied context into polished customer messages, staff briefings, pickup confirmations, or apology notes. |
 
 ## Agent Descriptions
@@ -61,6 +61,7 @@ Typical responsibilities:
 - Summarize daily sales and reservation activity
 - Identify low-stock or high-demand books
 - Review pickup workload for the day
+- Prepare customer-reported pickup cancellations or completions for approval
 - Ask the Catalog Specialist for popular or low-stock titles
 - Ask the Reservation Specialist for reservation status
 - Ask the Message Drafter to prepare staff briefings
@@ -96,6 +97,7 @@ Typical responsibilities:
 - Mark reservations as picked up
 - Review reservations for a customer or for the current day
 - Use customer information when reservation context requires it
+- Pause write operations until a human approves the proposed change
 
 Example request:
 
@@ -187,6 +189,10 @@ sequenceDiagram
 
 ## Write Actions To Demonstrate
 
+Write actions are approval-gated. During a normal agent run, the agent proposes
+the write and emits an approval request; PostgreSQL is mutated only after a
+human approves the request through the frontend or gateway API.
+
 | Action | Agent likely responsible | MCP tool |
 |---|---|---|
 | Create pickup reservation | Reservation Specialist | `create_reservation` |
@@ -208,8 +214,36 @@ sequenceDiagram
 | Store Operations MCP | `cancel_reservation` | Cancel an active reservation. |
 | Store Operations MCP | `mark_reservation_picked_up` | Mark a reservation as fulfilled. |
 | Store Operations MCP | `adjust_inventory` | Apply a manual stock correction or restock event. |
+| Store Operations MCP | `list_today_pickups` | List active reservations scheduled for pickup today. |
 | Store Operations MCP | `daily_sales_summary` | Summarize sales for a given date. |
 | Store Operations MCP | `top_selling_books` | Return best-selling titles for a time period. |
 | Customer MCP | `get_customer` | Retrieve customer profile details. |
 | Customer MCP | `lookup_loyalty_status` | Check loyalty tier or benefits. |
 | Customer MCP | `update_customer_preferences` | Add or update customer reading preferences. |
+
+## Example Pickup Cancellation Flow
+
+A staff member says:
+
+> Theo Martin called and is not going to pick up Signal from Glass Moon. Can we update the system accordingly?
+
+```mermaid
+sequenceDiagram
+  participant Staff
+  participant SM as Store Manager
+  participant SO as Store Operations MCP
+  participant Human as Human Approver
+  participant DB as PostgreSQL
+
+  Staff->>SM: Report pickup cancellation
+  SM->>SO: List active pickups for today
+  SO-->>SM: Active pickup rows
+  SM-->>Staff: Approval required for matching reservation
+  Human->>SM: Approve cancellation
+  SM->>SO: cancel_reservation with approval_id
+  SO->>DB: Set reservation status to cancelled
+  SO-->>SM: Updated reservation
+  Staff->>SM: Ask for today's pickups
+  SM->>SO: list_today_pickups
+  SO-->>SM: Active pickups only
+```

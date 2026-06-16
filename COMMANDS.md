@@ -25,6 +25,8 @@ docker compose run --rm bookstore-cli .venv/bin/python -m scripts.reset_demo_dat
 ```
 
 If host port `5432` is already occupied, set `POSTGRES_PORT=15432` in `.env`.
+For non-Postgres host port conflicts, set the matching `*_HOST_PORT` value in
+`.env` and leave the internal `*_PORT` value unchanged.
 
 ## Docker
 
@@ -69,6 +71,20 @@ curl -N http://localhost:8202/a2a/stream \
   -d '{"message":"What should I pay attention to before opening today?"}'
 ```
 
+Call through the frontend gateway, using the same path as the browser UI:
+
+```bash
+curl -N http://localhost:8300/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"agent":"store_manager","message":"Theo Martin called and is not going to pick up Signal from Glass Moon. Can we update the system accordingly?"}'
+```
+
+List pending approvals:
+
+```bash
+curl http://localhost:8300/approvals
+```
+
 Approve a pending write:
 
 ```bash
@@ -80,3 +96,6 @@ Reject a pending write:
 ```bash
 curl http://localhost:8300/approvals/<approval_id>/reject -X POST
 ```
+
+After approving a cancellation or pickup completion, ask the Store Manager for
+today's pickups again. The pickup list filters to active reservations only.

@@ -58,6 +58,7 @@ Current documentation checks:
 |       +-- __init__.py
 |       +-- common/
 |       |   +-- __init__.py
+|       |   +-- approvals.py
 |       |   +-- config.py
 |       |   +-- database.py
 |       |   +-- logging.py
@@ -92,7 +93,11 @@ Current documentation checks:
 |           |   +-- a2a_client.py
 |           |   +-- agent_cards.py
 |           |   +-- mcp_client.py
+|           |   +-- openai_runtime.py
 |           |   +-- prompts.py
+|           |   +-- runtime.py
+|           |   +-- server.py
+|           |   +-- streaming.py
 |           +-- customer_concierge/
 |           |   +-- __init__.py
 |           |   +-- agent.py
@@ -173,22 +178,42 @@ DATABASE_URL=
 
 CATALOG_MCP_HOST=
 CATALOG_MCP_PORT=
+CATALOG_MCP_HOST_PORT=
 CUSTOMER_MCP_HOST=
 CUSTOMER_MCP_PORT=
+CUSTOMER_MCP_HOST_PORT=
 STORE_OPERATIONS_MCP_HOST=
 STORE_OPERATIONS_MCP_PORT=
+STORE_OPERATIONS_MCP_HOST_PORT=
 
+CUSTOMER_CONCIERGE_AGENT_HOST=
+CUSTOMER_CONCIERGE_AGENT_PORT=
+CUSTOMER_CONCIERGE_AGENT_HOST_PORT=
 CUSTOMER_CONCIERGE_AGENT_URL=
+STORE_MANAGER_AGENT_HOST=
+STORE_MANAGER_AGENT_PORT=
+STORE_MANAGER_AGENT_HOST_PORT=
 STORE_MANAGER_AGENT_URL=
+CATALOG_SPECIALIST_AGENT_HOST=
+CATALOG_SPECIALIST_AGENT_PORT=
+CATALOG_SPECIALIST_AGENT_HOST_PORT=
 CATALOG_SPECIALIST_AGENT_URL=
+RESERVATION_SPECIALIST_AGENT_HOST=
+RESERVATION_SPECIALIST_AGENT_PORT=
+RESERVATION_SPECIALIST_AGENT_HOST_PORT=
 RESERVATION_SPECIALIST_AGENT_URL=
+MESSAGE_DRAFTER_AGENT_HOST=
+MESSAGE_DRAFTER_AGENT_PORT=
+MESSAGE_DRAFTER_AGENT_HOST_PORT=
 MESSAGE_DRAFTER_AGENT_URL=
 
 FRONTEND_GATEWAY_HOST=
 FRONTEND_GATEWAY_PORT=
+FRONTEND_GATEWAY_HOST_PORT=
 CHATKIT_API_PATH=
 FRONTEND_HOST=
 FRONTEND_PORT=
+FRONTEND_HOST_PORT=
 FRONTEND_GATEWAY_PUBLIC_URL=
 
 APPROVAL_REQUIRED_FOR_WRITES=
@@ -270,6 +295,7 @@ Tools:
 - `cancel_reservation`
 - `mark_reservation_picked_up`
 - `adjust_inventory`
+- `list_today_pickups`
 - `daily_sales_summary`
 - `top_selling_books`
 
@@ -443,23 +469,24 @@ Approval-gated actions:
 - `adjust_inventory`
 - `update_customer_preferences`
 
-Implementation requirements:
+Current implementation:
 
-1. Wrap every mutating MCP operation in an OpenAI Agents SDK function tool with approval enabled.
-2. Let the LLM decide when the tool is needed.
-3. When a write tool is selected, return an approval interruption instead of calling the MCP tool immediately.
-4. Persist the paused run state and a pending approval record.
-5. Surface the pending action to the user or operator with:
+1. Detect or select the mutating operation during the agent run.
+2. Return an approval interruption instead of calling the MCP write tool immediately.
+3. Persist a pending approval record in PostgreSQL.
+4. Surface the pending action to the user or operator with:
    - Agent name
    - Tool name
    - Proposed arguments
    - Human-readable summary
-   - Risk level
-6. Resume the same run after approval or rejection.
-7. On approval, call the underlying MCP write tool and include approval metadata such as `approval_id`.
-8. On rejection, resume with a rejected-tool result so the agent can explain what happened.
+   - Run state metadata
+5. On approval, call the underlying write operation and include approval metadata such as `approval_id`.
+6. On rejection, mark the approval rejected and perform no database mutation.
 
-The approval system should treat approvals as paused runs, not new user turns. This keeps streaming, trace history, and conversation state coherent.
+For this demo, the original agent run ends with a "waiting for human approval"
+answer after creating the pending approval. After the operator approves or
+rejects the request, the user can ask a follow-up question and the agent reads
+the updated database state.
 
 ## Phase 7: ChatKit Frontend
 
@@ -472,22 +499,22 @@ The frontend should let a user:
 - Approve or reject write actions
 - Inspect final results and relevant structured data
 
-Use OpenAI ChatKit with a custom Python server and connect it to the OpenAI Agents SDK backend through the A2A services. This keeps orchestration in Python while giving the demo a polished streaming chat UI.
+Use a ChatKit-oriented custom Python server and connect it to the OpenAI Agents SDK backend through the A2A services. This keeps orchestration in Python while giving the demo a polished streaming chat UI.
 
 Frontend components:
 
-- `frontend-gateway`: Python service that implements the ChatKit server endpoint.
-- `frontend`: browser-facing ChatKit app served from its own Docker container.
+- `frontend-gateway`: Python service that exposes `/chat`, `/chatkit`, agent discovery, and approval routes.
+- `frontend`: browser-facing static app served from its own Docker container.
 
 `frontend-gateway` responsibilities:
 
-- Expose the ChatKit endpoint.
+- Expose the `/chat` endpoint for the current browser UI.
+- Expose the `/chatkit` endpoint as the ChatKit-oriented SSE adapter.
 - Accept the selected agent from frontend context or thread metadata.
 - Route user messages to the selected A2A agent.
-- Stream agent responses, tool activity, subagent activity, and approval events back to ChatKit.
-- Render approval requests as ChatKit widgets, forms, or actions.
-- Receive approval or rejection actions and resume the paused agent run.
-- Store thread metadata and approval state using the selected local store.
+- Stream agent responses, tool activity, subagent activity, and approval events back to the browser UI and ChatKit adapter.
+- Receive approval or rejection actions and execute or reject the pending write.
+- Store approval state using PostgreSQL.
 - Expose health and readiness endpoints.
 
 `frontend` responsibilities:
@@ -495,14 +522,15 @@ Frontend components:
 - Provide a simple browser UI for the demo.
 - Let the user select any of the five agents.
 - Display starter prompts for customer and staff scenarios.
-- Connect to `frontend-gateway` using `FRONTEND_GATEWAY_PUBLIC_URL` and `CHATKIT_API_PATH`.
-- Show streamed responses and approval cards.
+- Connect to `frontend-gateway` using `FRONTEND_GATEWAY_PUBLIC_URL`; keep `CHATKIT_API_PATH` available for the ChatKit adapter.
+- Show streamed responses, inline run timelines, and approval cards.
+- Clear the visible chat transcript when the selected agent changes.
 - Be built and run as a separate Docker service.
 
 Implementation notes:
 
 - Keep all orchestration, agent, MCP, approval, and persistence logic in Python.
-- Keep browser code minimal and focused on ChatKit initialization, agent selection, and visual shell.
+- Keep browser code minimal and focused on gateway streaming, agent selection, approvals, and visual shell.
 - Avoid Agent Builder-hosted workflows for new work. Agent Builder is in a transition window and is scheduled to shut down on November 30, 2026. ChatKit custom server integrations remain the selected path for this project.
 - Keep the event adapter modular so AG-UI can be added later if a vendor-neutral event protocol becomes useful.
 
@@ -549,8 +577,9 @@ uv run ruff check .
 uv run pytest
 docker compose build
 docker compose up postgres
-docker compose run --rm bookstore-cli uv run python scripts/init_db.py
-docker compose run --rm bookstore-cli uv run python scripts/seed_fake_data.py
+docker compose run --rm bookstore-cli .venv/bin/python -m scripts.init_db
+docker compose run --rm bookstore-cli .venv/bin/python -m scripts.seed_fake_data
+docker compose run --rm bookstore-cli .venv/bin/python -m scripts.reset_demo_data
 docker compose up
 docker compose logs -f catalog-mcp
 docker compose logs -f customer-concierge-agent
@@ -591,7 +620,7 @@ Add focused tests for:
 - Reservation creation and stock checks
 - Reservation cancellation with approval
 - Inventory adjustment with approval
-- Approval pause and resume behavior
+- Approval creation and approved/rejected execution behavior
 - A2A JSON-RPC streaming event shape
 - Master agent routing decisions
 - Message Drafter output formatting with supplied context
@@ -620,3 +649,5 @@ Update or create:
 6. Use the OpenAI Python SDK and OpenAI Agents SDK as much as practical.
 7. Use ChatKit custom server integration for the frontend.
 8. Build the frontend as a separate dockerized component.
+9. Use `*_HOST_PORT` variables for Docker host port overrides while keeping internal service ports stable.
+10. The current frontend uses the gateway `/chat` stream directly and keeps `/chatkit` available as a ChatKit-oriented adapter.
