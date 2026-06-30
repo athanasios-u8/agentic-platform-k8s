@@ -15,6 +15,10 @@ x-backend-env: &backend-env
   APPROVAL_STATE_STORE: ${APPROVAL_STATE_STORE:-postgres}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
 
+x-backend-build: &backend-build
+  context: .
+  dockerfile: Dockerfile
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -33,12 +37,9 @@ services:
       retries: 12
 
   bookstore-cli:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/backend:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
     environment:
       <<: *backend-env
     depends_on:
@@ -46,23 +47,22 @@ services:
         condition: service_healthy
     profiles:
       - cli
-    command: [".venv/bin/python", "-m", "scripts.reset_demo_data"]
+    command: ["python", "-m", "scripts.reset_demo_data"]
 
   catalog-mcp:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/catalog-mcp:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.mcp_servers.catalog.server
     environment:
       <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.mcp_servers.catalog.server
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "${CATALOG_MCP_HOST_PORT:-8101}:8101"
-    command: [".venv/bin/python", "-m", "bookstore_agents.mcp_servers.catalog.server"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8101/healthz').read()\""]
       interval: 10s
@@ -70,20 +70,19 @@ services:
       retries: 12
 
   customer-mcp:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/customer-mcp:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.mcp_servers.customer.server
     environment:
       <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.mcp_servers.customer.server
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "${CUSTOMER_MCP_HOST_PORT:-8102}:8102"
-    command: [".venv/bin/python", "-m", "bookstore_agents.mcp_servers.customer.server"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8102/healthz').read()\""]
       interval: 10s
@@ -91,20 +90,19 @@ services:
       retries: 12
 
   store-operations-mcp:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/store-operations-mcp:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.mcp_servers.store_operations.server
     environment:
       <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.mcp_servers.store_operations.server
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "${STORE_OPERATIONS_MCP_HOST_PORT:-8103}:8103"
-    command: [".venv/bin/python", "-m", "bookstore_agents.mcp_servers.store_operations.server"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8103/healthz').read()\""]
       interval: 10s
@@ -112,20 +110,19 @@ services:
       retries: 12
 
   catalog-specialist-agent:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/catalog-specialist-agent:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.catalog_specialist.server
     environment:
       <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.catalog_specialist.server
     depends_on:
       catalog-mcp:
         condition: service_healthy
     ports:
       - "${CATALOG_SPECIALIST_AGENT_HOST_PORT:-8203}:8203"
-    command: [".venv/bin/python", "-m", "bookstore_agents.agents.catalog_specialist.server"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8203/healthz').read()\""]
       interval: 10s
@@ -133,14 +130,14 @@ services:
       retries: 12
 
   reservation-specialist-agent:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/reservation-specialist-agent:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.reservation_specialist.server
     environment:
       <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.reservation_specialist.server
     depends_on:
       store-operations-mcp:
         condition: service_healthy
@@ -148,7 +145,6 @@ services:
         condition: service_healthy
     ports:
       - "${RESERVATION_SPECIALIST_AGENT_HOST_PORT:-8204}:8204"
-    command: [".venv/bin/python", "-m", "bookstore_agents.agents.reservation_specialist.server"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8204/healthz').read()\""]
       interval: 10s
@@ -156,17 +152,16 @@ services:
       retries: 12
 
   message-drafter-agent:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/message-drafter-agent:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.message_drafter.server
     environment:
       <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.message_drafter.server
     ports:
       - "${MESSAGE_DRAFTER_AGENT_HOST_PORT:-8205}:8205"
-    command: [".venv/bin/python", "-m", "bookstore_agents.agents.message_drafter.server"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8205/healthz').read()\""]
       interval: 10s
@@ -174,14 +169,14 @@ services:
       retries: 12
 
   customer-concierge-agent:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/customer-concierge-agent:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.customer_concierge.server
     environment:
       <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.customer_concierge.server
     depends_on:
       catalog-specialist-agent:
         condition: service_healthy
@@ -191,7 +186,6 @@ services:
         condition: service_healthy
     ports:
       - "${CUSTOMER_CONCIERGE_AGENT_HOST_PORT:-8201}:8201"
-    command: [".venv/bin/python", "-m", "bookstore_agents.agents.customer_concierge.server"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8201/healthz').read()\""]
       interval: 10s
@@ -199,14 +193,14 @@ services:
       retries: 12
 
   store-manager-agent:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/store-manager-agent:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.store_manager.server
     environment:
       <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.store_manager.server
     depends_on:
       catalog-specialist-agent:
         condition: service_healthy
@@ -218,7 +212,6 @@ services:
         condition: service_healthy
     ports:
       - "${STORE_MANAGER_AGENT_HOST_PORT:-8202}:8202"
-    command: [".venv/bin/python", "-m", "bookstore_agents.agents.store_manager.server"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8202/healthz').read()\""]
       interval: 10s
@@ -226,14 +219,14 @@ services:
       retries: 12
 
   frontend-gateway:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/frontend-gateway:${IMAGE_TAG:-local}
     build:
-      context: .
-      dockerfile: Dockerfile
-    env_file:
-      - path: .env
-        required: false
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.frontend_gateway.server
     environment:
       <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.frontend_gateway.server
     depends_on:
       customer-concierge-agent:
         condition: service_healthy
@@ -247,7 +240,6 @@ services:
         condition: service_healthy
     ports:
       - "${FRONTEND_GATEWAY_HOST_PORT:-8300}:8300"
-    command: [".venv/bin/python", "-m", "bookstore_agents.frontend_gateway.server"]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8300/healthz').read()\""]
       interval: 10s
@@ -255,6 +247,7 @@ services:
       retries: 12
 
   frontend:
+    image: ${FRONTEND_IMAGE_PREFIX:-bookstore}/frontend:${IMAGE_TAG:-local}
     build:
       context: frontend
       dockerfile: Dockerfile

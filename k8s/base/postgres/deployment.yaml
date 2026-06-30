@@ -1,0 +1,76 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres
+        app.kubernetes.io/part-of: bookstore-agents
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16-alpine
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: POSTGRES_DB
+          value: bookstore
+        - name: POSTGRES_USER
+          value: bookstore
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: bookstore-secrets
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        ports:
+        - name: postgres
+          containerPort: 5432
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - "-U"
+            - bookstore
+            - "-d"
+            - bookstore
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - "-U"
+            - bookstore
+            - "-d"
+            - bookstore
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: '1'
+            memory: 1Gi
+        volumeMounts:
+        - name: postgres-data
+          mountPath: "/var/lib/postgresql/data"
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-data

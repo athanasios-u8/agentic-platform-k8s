@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bookstore-config
+data:
+  OPENAI_MODEL: gpt-5.5
+  OPENAI_TRACING_ENABLED: "true"
+  CATALOG_MCP_PORT: "8101"
+  CUSTOMER_MCP_PORT: "8102"
+  STORE_OPERATIONS_MCP_PORT: "8103"
+  CATALOG_MCP_URL: http://catalog-mcp:8101/mcp
+  CUSTOMER_MCP_URL: http://customer-mcp:8102/mcp
+  STORE_OPERATIONS_MCP_URL: http://store-operations-mcp:8103/mcp
+  CUSTOMER_CONCIERGE_AGENT_PORT: "8201"
+  STORE_MANAGER_AGENT_PORT: "8202"
+  CATALOG_SPECIALIST_AGENT_PORT: "8203"
+  RESERVATION_SPECIALIST_AGENT_PORT: "8204"
+  MESSAGE_DRAFTER_AGENT_PORT: "8205"
+  CUSTOMER_CONCIERGE_AGENT_URL: http://customer-concierge-agent:8201
+  STORE_MANAGER_AGENT_URL: http://store-manager-agent:8202
+  CATALOG_SPECIALIST_AGENT_URL: http://catalog-specialist-agent:8203
+  RESERVATION_SPECIALIST_AGENT_URL: http://reservation-specialist-agent:8204
+  MESSAGE_DRAFTER_AGENT_URL: http://message-drafter-agent:8205
+  FRONTEND_GATEWAY_PORT: "8300"
+  CHATKIT_API_PATH: /chatkit
+  APPROVAL_REQUIRED_FOR_WRITES: "true"
+  APPROVAL_STATE_STORE: postgres
+  LOG_LEVEL: INFO

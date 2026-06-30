@@ -1,0 +1,65 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: customer-mcp
+  labels:
+    app.kubernetes.io/name: customer-mcp
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: customer-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: customer-mcp
+        app.kubernetes.io/component: mcp-server
+        app.kubernetes.io/part-of: bookstore-agents
+    spec:
+      containers:
+      - name: customer-mcp
+        image: bookstore/customer-mcp:local
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: bookstore-config
+        env:
+        - name: BOOKSTORE_SERVICE_MODULE
+          value: bookstore_agents.mcp_servers.customer.server
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: bookstore-secrets
+              key: DATABASE_URL
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: bookstore-secrets
+              key: OPENAI_API_KEY
+        ports:
+        - name: http
+          containerPort: 8102
+        readinessProbe:
+          httpGet:
+            path: "/readyz"
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi

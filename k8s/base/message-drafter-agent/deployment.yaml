@@ -1,0 +1,65 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-drafter-agent
+  labels:
+    app.kubernetes.io/name: message-drafter-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: message-drafter-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: message-drafter-agent
+        app.kubernetes.io/component: agent
+        app.kubernetes.io/part-of: bookstore-agents
+    spec:
+      containers:
+      - name: message-drafter-agent
+        image: bookstore/message-drafter-agent:local
+        imagePullPolicy: IfNotPresent
+        envFrom:
+        - configMapRef:
+            name: bookstore-config
+        env:
+        - name: BOOKSTORE_SERVICE_MODULE
+          value: bookstore_agents.agents.message_drafter.server
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: bookstore-secrets
+              key: DATABASE_URL
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: bookstore-secrets
+              key: OPENAI_API_KEY
+        ports:
+        - name: http
+          containerPort: 8205
+        readinessProbe:
+          httpGet:
+            path: "/readyz"
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: "/healthz"
+            port: http
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi

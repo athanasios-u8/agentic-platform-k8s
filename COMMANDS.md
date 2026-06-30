@@ -19,9 +19,9 @@ uv run pytest
 
 ```bash
 docker compose up -d postgres
-docker compose run --rm bookstore-cli .venv/bin/python -m scripts.init_db
-docker compose run --rm bookstore-cli .venv/bin/python -m scripts.seed_fake_data
-docker compose run --rm bookstore-cli .venv/bin/python -m scripts.reset_demo_data
+docker compose run --rm bookstore-cli python -m scripts.init_db
+docker compose run --rm bookstore-cli python -m scripts.seed_fake_data
+docker compose run --rm bookstore-cli python -m scripts.reset_demo_data
 ```
 
 If host port `5432` is already occupied, set `POSTGRES_PORT=15432` in `.env`.
@@ -38,6 +38,36 @@ docker compose logs -f customer-concierge-agent
 docker compose logs -f frontend-gateway
 docker compose logs -f frontend
 ```
+
+Build only the deployable agent and MCP images:
+
+```bash
+make docker-build-agent-mcp-images
+```
+
+Build all backend images, including the generic job image and gateway:
+
+```bash
+make docker-build-backend-images
+```
+
+Tag images for a registry:
+
+```bash
+make docker-build-backend-images BACKEND_IMAGE_PREFIX=ghcr.io/your-org/bookstore IMAGE_TAG=0.1.0
+```
+
+## Kubernetes
+
+```bash
+kubectl apply -k k8s/base
+kubectl -n bookstore get pods
+kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
+```
+
+For non-local clusters, push the images from `make docker-build-backend-images`
+and update the image references in each service folder's `deployment.yaml` and
+in `k8s/base/reset-demo-data/job.yaml`.
 
 ## Local Services Without Docker
 

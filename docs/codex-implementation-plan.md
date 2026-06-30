@@ -169,50 +169,41 @@ OPENAI_API_KEY=
 OPENAI_MODEL=
 OPENAI_TRACING_ENABLED=
 
-POSTGRES_HOST=
 POSTGRES_PORT=
 POSTGRES_DB=
 POSTGRES_USER=
 POSTGRES_PASSWORD=
 DATABASE_URL=
 
-CATALOG_MCP_HOST=
 CATALOG_MCP_PORT=
 CATALOG_MCP_HOST_PORT=
-CUSTOMER_MCP_HOST=
+CATALOG_MCP_URL=
 CUSTOMER_MCP_PORT=
 CUSTOMER_MCP_HOST_PORT=
-STORE_OPERATIONS_MCP_HOST=
+CUSTOMER_MCP_URL=
 STORE_OPERATIONS_MCP_PORT=
 STORE_OPERATIONS_MCP_HOST_PORT=
+STORE_OPERATIONS_MCP_URL=
 
-CUSTOMER_CONCIERGE_AGENT_HOST=
 CUSTOMER_CONCIERGE_AGENT_PORT=
 CUSTOMER_CONCIERGE_AGENT_HOST_PORT=
 CUSTOMER_CONCIERGE_AGENT_URL=
-STORE_MANAGER_AGENT_HOST=
 STORE_MANAGER_AGENT_PORT=
 STORE_MANAGER_AGENT_HOST_PORT=
 STORE_MANAGER_AGENT_URL=
-CATALOG_SPECIALIST_AGENT_HOST=
 CATALOG_SPECIALIST_AGENT_PORT=
 CATALOG_SPECIALIST_AGENT_HOST_PORT=
 CATALOG_SPECIALIST_AGENT_URL=
-RESERVATION_SPECIALIST_AGENT_HOST=
 RESERVATION_SPECIALIST_AGENT_PORT=
 RESERVATION_SPECIALIST_AGENT_HOST_PORT=
 RESERVATION_SPECIALIST_AGENT_URL=
-MESSAGE_DRAFTER_AGENT_HOST=
 MESSAGE_DRAFTER_AGENT_PORT=
 MESSAGE_DRAFTER_AGENT_HOST_PORT=
 MESSAGE_DRAFTER_AGENT_URL=
 
-FRONTEND_GATEWAY_HOST=
 FRONTEND_GATEWAY_PORT=
 FRONTEND_GATEWAY_HOST_PORT=
 CHATKIT_API_PATH=
-FRONTEND_HOST=
-FRONTEND_PORT=
 FRONTEND_HOST_PORT=
 FRONTEND_GATEWAY_PUBLIC_URL=
 
@@ -220,6 +211,10 @@ APPROVAL_REQUIRED_FOR_WRITES=
 APPROVAL_STATE_STORE=
 
 LOG_LEVEL=
+
+BACKEND_IMAGE_PREFIX=
+FRONTEND_IMAGE_PREFIX=
+IMAGE_TAG=
 ```
 
 ## Phase 2: Database And Fake Data
@@ -551,14 +546,14 @@ Use Docker Compose services for:
 - `frontend`
 - `bookstore-cli` for one-off database scripts
 
-Use one reusable Python application Dockerfile if possible for MCP servers, agents, `frontend-gateway`, and `bookstore-cli`. Different Python services can run different module entrypoints through Compose commands.
+Use one reusable Python application Dockerfile for MCP servers, agents, `frontend-gateway`, and `bookstore-cli`. Each long-running Python service sets `BOOKSTORE_SERVICE_MODULE` so the same image layout can run a different module entrypoint; one-off CLI jobs can override the container args with `python -m ...`.
 
 Use `frontend/Dockerfile` for the browser-facing frontend component. It can serve static assets directly or run a minimal static web server. The frontend container should not contain OpenAI credentials or database credentials.
 
 Docker requirements:
 
 - Install Python dependencies with `uv sync --locked` or `uv sync --frozen`.
-- Run Python services with `uv run`.
+- Run Python services from the locked virtual environment through the container entrypoint.
 - Expose ports for each MCP server, A2A agent, the frontend gateway, and the frontend.
 - Use environment variables from `.env`.
 - Mount source code in development if live editing is desired.
@@ -566,6 +561,8 @@ Docker requirements:
 - Set `frontend` to depend on `frontend-gateway`.
 - Set `frontend-gateway` to depend on the five agent services.
 - Keep `OPENAI_API_KEY` available only to backend services that need model access, not to the browser-facing frontend container.
+- Build deployable agent and MCP images with service-specific image tags such as `bookstore/catalog-mcp:local` and `bookstore/customer-concierge-agent:local`.
+- Keep Kubernetes manifests under `k8s/base`, with one folder per deployable unit. For example, `k8s/base/catalog-mcp/service.yaml` and `k8s/base/catalog-mcp/deployment.yaml`.
 
 ## Phase 9: Command Documentation
 
@@ -577,14 +574,16 @@ uv run ruff check .
 uv run pytest
 docker compose build
 docker compose up postgres
-docker compose run --rm bookstore-cli .venv/bin/python -m scripts.init_db
-docker compose run --rm bookstore-cli .venv/bin/python -m scripts.seed_fake_data
-docker compose run --rm bookstore-cli .venv/bin/python -m scripts.reset_demo_data
+docker compose run --rm bookstore-cli python -m scripts.init_db
+docker compose run --rm bookstore-cli python -m scripts.seed_fake_data
+docker compose run --rm bookstore-cli python -m scripts.reset_demo_data
 docker compose up
 docker compose logs -f catalog-mcp
 docker compose logs -f customer-concierge-agent
 docker compose logs -f frontend-gateway
 docker compose logs -f frontend
+make docker-build-agent-mcp-images
+kubectl apply -k k8s/base
 ```
 
 Also include direct local commands for starting each server without Docker:

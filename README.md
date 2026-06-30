@@ -23,7 +23,7 @@ uv sync
 uv lock
 docker compose build
 docker compose up -d postgres
-docker compose run --rm bookstore-cli .venv/bin/python -m scripts.reset_demo_data
+docker compose run --rm bookstore-cli python -m scripts.reset_demo_data
 docker compose up
 ```
 
@@ -66,6 +66,47 @@ The host port can be changed with the matching `*_HOST_PORT` variable while the
 service keeps its internal container port. For example,
 `CATALOG_MCP_HOST_PORT=18101` publishes the Catalog MCP server on host port
 `18101` while other containers still reach it at `catalog-mcp:8101`.
+
+## Container Images
+
+The backend services use one reusable Python Dockerfile. Each agent and MCP
+server is built with a service-specific `BOOKSTORE_SERVICE_MODULE` so it can be
+tagged, pushed, and deployed independently:
+
+```bash
+make docker-build-agent-mcp-images
+```
+
+Set `BACKEND_IMAGE_PREFIX` and `IMAGE_TAG` when building images for a registry:
+
+```bash
+make docker-build-agent-mcp-images \
+  BACKEND_IMAGE_PREFIX=ghcr.io/your-org/bookstore \
+  IMAGE_TAG=0.1.0
+```
+
+`docker compose build` uses the same image names and also builds the gateway and
+frontend images for local full-stack runs.
+
+## Kubernetes
+
+Kubernetes manifests live in `k8s/base`. Each deployable unit has its own
+folder, for example `k8s/base/catalog-mcp/service.yaml` and
+`k8s/base/catalog-mcp/deployment.yaml`. The base defines Deployments and
+ClusterIP Services for the three MCP servers, five agents, and frontend gateway,
+plus a demo Postgres deployment and a one-shot data reset Job.
+
+For a local cluster that can see the `bookstore/*:local` images:
+
+```bash
+make docker-build-backend-images
+kubectl apply -k k8s/base
+kubectl -n bookstore get pods
+kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
+```
+
+Before using a shared cluster, update `k8s/base/secrets.yaml` with real secret
+values and point each service folder's `deployment.yaml` at pushed image tags.
 
 ## Browser UI
 

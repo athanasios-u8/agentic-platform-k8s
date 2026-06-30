@@ -44,7 +44,6 @@ class Settings(BaseSettings):
         alias="MESSAGE_DRAFTER_AGENT_URL",
     )
 
-    frontend_gateway_host: str = Field(default="0.0.0.0", alias="FRONTEND_GATEWAY_HOST")
     frontend_gateway_port: int = Field(default=8300, alias="FRONTEND_GATEWAY_PORT")
     chatkit_api_path: str = Field(default="/chatkit", alias="CHATKIT_API_PATH")
 
