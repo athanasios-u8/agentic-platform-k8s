@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: bookstore
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - postgres
+  - reset-demo-data
+  - openai-modelapi
+  - catalog-mcp
+  - customer-mcp
+  - store-operations-mcp
+  - catalog-specialist-agent
+  - reservation-specialist-agent
+  - message-drafter-agent
+  - customer-concierge-agent
+  - store-manager-agent

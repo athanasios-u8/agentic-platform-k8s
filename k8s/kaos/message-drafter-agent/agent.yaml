@@ -1,0 +1,62 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  name: message-drafter
+  labels:
+    app.kubernetes.io/name: message-drafter-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  modelAPI: openai
+  model: gpt-5.5
+  config:
+    description: Drafts customer and staff messages from supplied context without tools.
+    instructions: |
+      You are the Message Drafter. You do not use tools. Turn supplied context into
+      friendly customer confirmations, staff briefings, apology notes, or concise updates.
+    reasoningLoopMaxSteps: 5
+  agentNetwork:
+    expose: true
+    access: []
+  container:
+    image: bookstore/message-drafter-agent:local
+    env:
+      - name: BOOKSTORE_SERVICE_MODULE
+        value: bookstore_agents.agents.message_drafter.server
+      - name: MESSAGE_DRAFTER_AGENT_PORT
+        value: "8000"
+      - name: OPENAI_MODEL
+        value: gpt-5.5
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: DATABASE_URL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  podSpec:
+    containers:
+      - name: agent
+        envFrom:
+          - configMapRef:
+              name: bookstore-config
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3

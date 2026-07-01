@@ -1,0 +1,66 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  name: catalog-specialist
+  labels:
+    app.kubernetes.io/name: catalog-specialist-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  modelAPI: openai
+  model: gpt-5.5
+  mcpServers:
+    - catalog
+  config:
+    description: Searches and recommends books from the bookstore catalog.
+    instructions: |
+      You are the Catalog Specialist. Search and recommend books using catalog data.
+      Explain why each recommendation fits the user request.
+    reasoningLoopMaxSteps: 5
+  agentNetwork:
+    expose: true
+    access: []
+  container:
+    image: bookstore/catalog-specialist-agent:local
+    env:
+      - name: BOOKSTORE_SERVICE_MODULE
+        value: bookstore_agents.agents.catalog_specialist.server
+      - name: CATALOG_SPECIALIST_AGENT_PORT
+        value: "8000"
+      - name: OPENAI_MODEL
+        value: gpt-5.5
+      - name: CATALOG_MCP_URL
+        value: http://mcpserver-catalog:8000/mcp
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: DATABASE_URL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  podSpec:
+    containers:
+      - name: agent
+        envFrom:
+          - configMapRef:
+              name: bookstore-config
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3

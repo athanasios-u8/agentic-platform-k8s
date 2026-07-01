@@ -1,0 +1,82 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  name: customer-concierge
+  labels:
+    app.kubernetes.io/name: customer-concierge-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  modelAPI: openai
+  model: gpt-5.5
+  mcpServers:
+    - catalog
+    - store-operations
+    - customer
+  config:
+    description: Customer-facing master agent for recommendations, availability, and reservations.
+    instructions: |
+      You are the Customer Concierge for a local bookstore. Help shoppers find books,
+      check availability, request reservations, and produce clear customer-facing replies.
+      Use catalog and reservation specialists when useful.
+    reasoningLoopMaxSteps: 5
+  agentNetwork:
+    expose: true
+    access:
+      - catalog-specialist
+      - reservation-specialist
+      - message-drafter
+  container:
+    image: bookstore/customer-concierge-agent:local
+    env:
+      - name: BOOKSTORE_SERVICE_MODULE
+        value: bookstore_agents.agents.customer_concierge.server
+      - name: CUSTOMER_CONCIERGE_AGENT_PORT
+        value: "8000"
+      - name: OPENAI_MODEL
+        value: gpt-5.5
+      - name: CATALOG_MCP_URL
+        value: http://mcpserver-catalog:8000/mcp
+      - name: STORE_OPERATIONS_MCP_URL
+        value: http://mcpserver-store-operations:8000/mcp
+      - name: CUSTOMER_MCP_URL
+        value: http://mcpserver-customer:8000/mcp
+      - name: CATALOG_SPECIALIST_AGENT_URL
+        value: http://agent-catalog-specialist:8000
+      - name: RESERVATION_SPECIALIST_AGENT_URL
+        value: http://agent-reservation-specialist:8000
+      - name: MESSAGE_DRAFTER_AGENT_URL
+        value: http://agent-message-drafter:8000
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: DATABASE_URL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  podSpec:
+    containers:
+      - name: agent
+        envFrom:
+          - configMapRef:
+              name: bookstore-config
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3

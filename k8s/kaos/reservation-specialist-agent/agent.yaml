@@ -1,0 +1,69 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  name: reservation-specialist
+  labels:
+    app.kubernetes.io/name: reservation-specialist-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  modelAPI: openai
+  model: gpt-5.5
+  mcpServers:
+    - store-operations
+    - customer
+  config:
+    description: Checks stock and prepares reservation changes with human approval.
+    instructions: |
+      You are the Reservation Specialist. Check stock and prepare reservation actions.
+      Write actions require human approval before they mutate the database.
+    reasoningLoopMaxSteps: 5
+  agentNetwork:
+    expose: true
+    access: []
+  container:
+    image: bookstore/reservation-specialist-agent:local
+    env:
+      - name: BOOKSTORE_SERVICE_MODULE
+        value: bookstore_agents.agents.reservation_specialist.server
+      - name: RESERVATION_SPECIALIST_AGENT_PORT
+        value: "8000"
+      - name: OPENAI_MODEL
+        value: gpt-5.5
+      - name: STORE_OPERATIONS_MCP_URL
+        value: http://mcpserver-store-operations:8000/mcp
+      - name: CUSTOMER_MCP_URL
+        value: http://mcpserver-customer:8000/mcp
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: DATABASE_URL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  podSpec:
+    containers:
+      - name: agent
+        envFrom:
+          - configMapRef:
+              name: bookstore-config
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3

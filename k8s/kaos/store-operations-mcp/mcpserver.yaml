@@ -1,0 +1,47 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: MCPServer
+metadata:
+  name: store-operations
+  labels:
+    app.kubernetes.io/name: store-operations-mcp
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  runtime: custom
+  gatewayRoute:
+    timeout: "60s"
+  container:
+    image: bookstore/store-operations-mcp:local
+    env:
+      - name: BOOKSTORE_SERVICE_MODULE
+        value: bookstore_agents.mcp_servers.store_operations.server
+      - name: STORE_OPERATIONS_MCP_PORT
+        value: "8000"
+      - name: APPROVAL_REQUIRED_FOR_WRITES
+        valueFrom:
+          configMapKeyRef:
+            name: bookstore-config
+            key: APPROVAL_REQUIRED_FOR_WRITES
+      - name: APPROVAL_STATE_STORE
+        valueFrom:
+          configMapKeyRef:
+            name: bookstore-config
+            key: APPROVAL_STATE_STORE
+      - name: LOG_LEVEL
+        valueFrom:
+          configMapKeyRef:
+            name: bookstore-config
+            key: LOG_LEVEL
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: DATABASE_URL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi

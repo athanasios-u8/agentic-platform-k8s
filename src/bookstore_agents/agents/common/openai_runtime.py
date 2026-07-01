@@ -11,11 +11,20 @@ except Exception:  # pragma: no cover
 class OpenAITextRuntime:
     def __init__(self) -> None:
         self.settings = get_settings()
+        base_url = self._openai_base_url()
+        api_key = self.settings.openai_api_key or ("kaos-modelapi" if base_url else None)
         self.client = (
-            AsyncOpenAI(api_key=self.settings.openai_api_key)
-            if AsyncOpenAI and self.settings.openai_api_key
+            AsyncOpenAI(api_key=api_key, base_url=base_url)
+            if AsyncOpenAI and api_key
             else None
         )
+
+    def _openai_base_url(self) -> str | None:
+        base_url = self.settings.openai_base_url or self.settings.model_api_url
+        if not base_url:
+            return None
+
+        return base_url.rstrip("/")
 
     async def polish(
         self,

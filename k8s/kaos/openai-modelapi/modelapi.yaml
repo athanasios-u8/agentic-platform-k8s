@@ -1,0 +1,34 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: ModelAPI
+metadata:
+  name: openai
+  labels:
+    app.kubernetes.io/name: openai
+    app.kubernetes.io/component: modelapi
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  mode: Proxy
+  proxyConfig:
+    models:
+      - gpt-5.5
+    provider: openai
+    apiBase: https://api.openai.com
+    apiKey:
+      valueFrom:
+        secretKeyRef:
+          name: bookstore-secrets
+          key: OPENAI_API_KEY
+  gatewayRoute:
+    timeout: "120s"
+  container:
+    env:
+      - name: LITELLM_LOG
+        value: INFO
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
