@@ -54,11 +54,11 @@ Docker Compose includes an optional CPU-only Ollama service for local
 `OLLAMA_*` variables so it can run alongside the OpenAI configuration in
 `OPENAI_*`.
 
-Start Ollama and pull the model:
+Start the local LLM stack. On first run, Compose starts Ollama, pulls the
+configured model, and then starts Release Scout:
 
 ```bash
-docker compose --profile local-llm up -d ollama
-docker compose exec ollama ollama pull llama3.2:3b
+docker compose --profile local-llm up --build
 ```
 
 Call it locally:
@@ -86,9 +86,7 @@ OLLAMA_API_KEY=ollama
 TAVILY_API_KEY=tvly-...
 ```
 
-Then start the stack with the `local-llm` profile so the Ollama container,
-Release Scout agent, and upcoming-release MCP server run in parallel with the
-rest of the application:
+After updating `.env`, start the stack with the same command:
 
 ```bash
 docker compose --profile local-llm up --build

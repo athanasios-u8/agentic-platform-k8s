@@ -44,12 +44,13 @@ docker compose logs -f frontend
 Start the optional CPU-only Ollama service. Its application settings use
 `OLLAMA_*` variables and remain separate from `OPENAI_*`.
 
+One command starts Ollama, pulls the configured model, and runs the local stack:
+
 ```bash
-docker compose --profile local-llm up -d ollama
-docker compose exec ollama ollama pull llama3.2:3b
+docker compose --profile local-llm up --build
 ```
 
-Call it locally:
+After the model is pulled, you can call Ollama locally:
 
 ```bash
 curl http://localhost:11434/api/chat \
@@ -74,8 +75,7 @@ OLLAMA_API_KEY=ollama
 TAVILY_API_KEY=tvly-...
 ```
 
-Then start the full stack with the local LLM profile so Ollama, Release Scout,
-and the Tavily-backed upcoming-release MCP server run in parallel:
+After updating `.env`, start the stack with the same command:
 
 ```bash
 docker compose --profile local-llm up --build

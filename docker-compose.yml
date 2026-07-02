@@ -57,6 +57,17 @@ services:
       timeout: 5s
       retries: 12
 
+  ollama-pull:
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-latest}
+    profiles:
+      - local-llm
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    command: ["pull", "${OLLAMA_MODEL:-llama3.2:3b}"]
+
   bookstore-cli:
     image: ${BACKEND_IMAGE_PREFIX:-bookstore}/backend:${IMAGE_TAG:-local}
     build:
@@ -222,6 +233,8 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
       upcoming-releases-mcp:
         condition: service_healthy
     ports:
