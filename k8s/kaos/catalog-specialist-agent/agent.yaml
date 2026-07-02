@@ -3,6 +3,7 @@ apiVersion: kaos.tools/v1alpha1
 kind: Agent
 metadata:
   name: catalog-specialist
+  namespace: bookstore
   labels:
     app.kubernetes.io/name: catalog-specialist-agent
     app.kubernetes.io/component: agent

@@ -3,6 +3,7 @@ apiVersion: kaos.tools/v1alpha1
 kind: Agent
 metadata:
   name: store-manager
+  namespace: bookstore
   labels:
     app.kubernetes.io/name: store-manager-agent
     app.kubernetes.io/component: agent

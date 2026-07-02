@@ -3,6 +3,7 @@ apiVersion: kaos.tools/v1alpha1
 kind: MCPServer
 metadata:
   name: store-operations
+  namespace: bookstore
   labels:
     app.kubernetes.io/name: store-operations-mcp
     app.kubernetes.io/component: mcp-server

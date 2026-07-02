@@ -3,6 +3,7 @@ apiVersion: kaos.tools/v1alpha1
 kind: ModelAPI
 metadata:
   name: openai
+  namespace: bookstore
   labels:
     app.kubernetes.io/name: openai
     app.kubernetes.io/component: modelapi

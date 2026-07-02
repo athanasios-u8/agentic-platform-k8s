@@ -3,6 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: bookstore-reset-demo-data
+  namespace: bookstore
   labels:
     app.kubernetes.io/name: bookstore-reset-demo-data
     app.kubernetes.io/part-of: bookstore-agents

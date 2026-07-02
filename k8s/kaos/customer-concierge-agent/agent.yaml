@@ -3,6 +3,7 @@ apiVersion: kaos.tools/v1alpha1
 kind: Agent
 metadata:
   name: customer-concierge
+  namespace: bookstore
   labels:
     app.kubernetes.io/name: customer-concierge-agent
     app.kubernetes.io/component: agent

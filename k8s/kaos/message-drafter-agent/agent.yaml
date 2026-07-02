@@ -3,6 +3,7 @@ apiVersion: kaos.tools/v1alpha1
 kind: Agent
 metadata:
   name: message-drafter
+  namespace: bookstore
   labels:
     app.kubernetes.io/name: message-drafter-agent
     app.kubernetes.io/component: agent
