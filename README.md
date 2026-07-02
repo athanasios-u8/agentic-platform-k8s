@@ -47,10 +47,58 @@ The frontend gateway is available at:
 http://localhost:8300
 ```
 
+## Local Llama 3.2 3B With Ollama
+
+Docker Compose includes an optional CPU-only Ollama service for local
+`llama3.2:3b` runs. No GPU flags are required. Ollama configuration uses
+`OLLAMA_*` variables so it can run alongside the OpenAI configuration in
+`OPENAI_*`.
+
+Start Ollama and pull the model:
+
+```bash
+docker compose --profile local-llm up -d ollama
+docker compose exec ollama ollama pull llama3.2:3b
+```
+
+Call it locally:
+
+```bash
+curl http://localhost:11434/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "llama3.2:3b",
+    "messages": [{"role": "user", "content": "Hello from the bookstore stack"}],
+    "stream": false
+  }'
+```
+
+Configure OpenAI and Ollama independently in `.env`:
+
+```env
+OPENAI_MODEL=gpt-5.5
+OPENAI_API_KEY=...
+
+OLLAMA_MODEL=llama3.2:3b
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_API_KEY=ollama
+```
+
+Then start the stack with the `local-llm` profile so the Ollama container runs
+in parallel with the rest of the application:
+
+```bash
+docker compose --profile local-llm up
+```
+
+Ollama stores downloaded models in the `ollama` named volume. If host port
+`11434` is already occupied, set `OLLAMA_HOST_PORT` in `.env`.
+
 ## Services
 
 | Service | Default host port | Purpose |
 |---|---:|---|
+| `ollama` | 11434 | Optional CPU-only local LLM runtime for `llama3.2:3b` |
 | `catalog-mcp` | 8101 | Book search and recommendations |
 | `customer-mcp` | 8102 | Customer profiles and preferences |
 | `store-operations-mcp` | 8103 | Inventory, reservations, and sales |
@@ -142,4 +190,8 @@ pickup queue.
 
 ## Notes
 
-The first implementation provides A2A-compatible HTTP/JSON streaming surfaces and an SDK-ready structure. The agent runtime has deterministic fallbacks so the stack can be exercised without an OpenAI key, but production demo runs should set `OPENAI_API_KEY`.
+The first implementation provides A2A-compatible HTTP/JSON streaming surfaces
+and an SDK-ready structure. The agent runtime has deterministic fallbacks so the
+stack can be exercised without an OpenAI key. OpenAI and Ollama settings are
+kept separate as `OPENAI_*` and `OLLAMA_*` variables so both providers can be
+configured for the same application run.

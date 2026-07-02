@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     openai_tracing_enabled: bool = Field(default=True, alias="OPENAI_TRACING_ENABLED")
     model_api_url: str | None = Field(default=None, alias="MODEL_API_URL")
 
+    ollama_model: str = Field(default="llama3.2:3b", alias="OLLAMA_MODEL")
+    ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
+    ollama_api_key: str = Field(default="ollama", alias="OLLAMA_API_KEY")
+
     database_url: str = Field(
         default="postgresql://bookstore:bookstore@localhost:5432/bookstore",
         alias="DATABASE_URL",

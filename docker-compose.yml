@@ -2,6 +2,9 @@ x-backend-env: &backend-env
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
   OPENAI_TRACING_ENABLED: ${OPENAI_TRACING_ENABLED:-true}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+  OLLAMA_API_KEY: ${OLLAMA_API_KEY:-ollama}
   DATABASE_URL: ${DATABASE_URL:-postgresql://bookstore:bookstore@postgres:5432/bookstore}
   CATALOG_MCP_URL: ${CATALOG_MCP_URL:-http://catalog-mcp:8101/mcp}
   CUSTOMER_MCP_URL: ${CUSTOMER_MCP_URL:-http://customer-mcp:8102/mcp}
@@ -33,6 +36,20 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bookstore} -d ${POSTGRES_DB:-bookstore}"]
       interval: 5s
+      timeout: 5s
+      retries: 12
+
+  ollama:
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-latest}
+    profiles:
+      - local-llm
+    ports:
+      - "${OLLAMA_HOST_PORT:-11434}:11434"
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
       timeout: 5s
       retries: 12
 
@@ -262,3 +279,4 @@ services:
 
 volumes:
   bookstore-postgres:
+  ollama:

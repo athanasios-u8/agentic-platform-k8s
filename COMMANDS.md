@@ -39,6 +39,46 @@ docker compose logs -f frontend-gateway
 docker compose logs -f frontend
 ```
 
+## Local Llama 3.2 3B With Ollama
+
+Start the optional CPU-only Ollama service. Its application settings use
+`OLLAMA_*` variables and remain separate from `OPENAI_*`.
+
+```bash
+docker compose --profile local-llm up -d ollama
+docker compose exec ollama ollama pull llama3.2:3b
+```
+
+Call it locally:
+
+```bash
+curl http://localhost:11434/api/chat \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "llama3.2:3b",
+    "messages": [{"role": "user", "content": "Hello from the bookstore stack"}],
+    "stream": false
+  }'
+```
+
+Configure OpenAI and Ollama independently in `.env`:
+
+```env
+OPENAI_MODEL=gpt-5.5
+OPENAI_API_KEY=...
+
+OLLAMA_MODEL=llama3.2:3b
+OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_API_KEY=ollama
+```
+
+Then start the full stack with the local LLM profile so both providers can run
+in parallel:
+
+```bash
+docker compose --profile local-llm up
+```
+
 Build only the deployable agent and MCP images:
 
 ```bash
