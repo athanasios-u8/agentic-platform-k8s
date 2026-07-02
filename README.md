@@ -82,14 +82,21 @@ OPENAI_API_KEY=...
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_API_KEY=ollama
+
+TAVILY_API_KEY=tvly-...
 ```
 
-Then start the stack with the `local-llm` profile so the Ollama container runs
-in parallel with the rest of the application:
+Then start the stack with the `local-llm` profile so the Ollama container,
+Release Scout agent, and upcoming-release MCP server run in parallel with the
+rest of the application:
 
 ```bash
-docker compose --profile local-llm up
+docker compose --profile local-llm up --build
 ```
+
+Open `http://localhost:3000` and choose `Release Scout` in the agent selector
+to search for upcoming book releases. Existing agents continue to use the
+OpenAI settings.
 
 Ollama stores downloaded models in the `ollama` named volume. If host port
 `11434` is already occupied, set `OLLAMA_HOST_PORT` in `.env`.
@@ -102,11 +109,13 @@ Ollama stores downloaded models in the `ollama` named volume. If host port
 | `catalog-mcp` | 8101 | Book search and recommendations |
 | `customer-mcp` | 8102 | Customer profiles and preferences |
 | `store-operations-mcp` | 8103 | Inventory, reservations, and sales |
+| `upcoming-releases-mcp` | 8104 | Tavily-backed web search for upcoming releases |
 | `customer-concierge-agent` | 8201 | Customer-facing master agent |
 | `store-manager-agent` | 8202 | Staff-facing master agent |
 | `catalog-specialist-agent` | 8203 | Catalog subagent |
 | `reservation-specialist-agent` | 8204 | Reservation subagent |
 | `message-drafter-agent` | 8205 | No-tool drafting subagent |
+| `release-scout-agent` | 8206 | Ollama-backed upcoming release subagent |
 | `frontend-gateway` | 8300 | ChatKit gateway and approval routes |
 | `frontend` | 3000 | Browser UI |
 

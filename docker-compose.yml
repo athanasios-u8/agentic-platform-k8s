@@ -5,15 +5,19 @@ x-backend-env: &backend-env
   OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
   OLLAMA_API_KEY: ${OLLAMA_API_KEY:-ollama}
+  TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+  TAVILY_SEARCH_URL: ${TAVILY_SEARCH_URL:-https://api.tavily.com/search}
   DATABASE_URL: ${DATABASE_URL:-postgresql://bookstore:bookstore@postgres:5432/bookstore}
   CATALOG_MCP_URL: ${CATALOG_MCP_URL:-http://catalog-mcp:8101/mcp}
   CUSTOMER_MCP_URL: ${CUSTOMER_MCP_URL:-http://customer-mcp:8102/mcp}
   STORE_OPERATIONS_MCP_URL: ${STORE_OPERATIONS_MCP_URL:-http://store-operations-mcp:8103/mcp}
+  UPCOMING_RELEASES_MCP_URL: ${UPCOMING_RELEASES_MCP_URL:-http://upcoming-releases-mcp:8104/mcp}
   CUSTOMER_CONCIERGE_AGENT_URL: ${CUSTOMER_CONCIERGE_AGENT_URL:-http://customer-concierge-agent:8201}
   STORE_MANAGER_AGENT_URL: ${STORE_MANAGER_AGENT_URL:-http://store-manager-agent:8202}
   CATALOG_SPECIALIST_AGENT_URL: ${CATALOG_SPECIALIST_AGENT_URL:-http://catalog-specialist-agent:8203}
   RESERVATION_SPECIALIST_AGENT_URL: ${RESERVATION_SPECIALIST_AGENT_URL:-http://reservation-specialist-agent:8204}
   MESSAGE_DRAFTER_AGENT_URL: ${MESSAGE_DRAFTER_AGENT_URL:-http://message-drafter-agent:8205}
+  RELEASE_SCOUT_AGENT_URL: ${RELEASE_SCOUT_AGENT_URL:-http://release-scout-agent:8206}
   APPROVAL_REQUIRED_FOR_WRITES: ${APPROVAL_REQUIRED_FOR_WRITES:-true}
   APPROVAL_STATE_STORE: ${APPROVAL_STATE_STORE:-postgres}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -126,6 +130,25 @@ services:
       timeout: 5s
       retries: 12
 
+  upcoming-releases-mcp:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/upcoming-releases-mcp:${IMAGE_TAG:-local}
+    profiles:
+      - local-llm
+    build:
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.mcp_servers.upcoming_releases.server
+    environment:
+      <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.mcp_servers.upcoming_releases.server
+    ports:
+      - "${UPCOMING_RELEASES_MCP_HOST_PORT:-8104}:8104"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8104/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   catalog-specialist-agent:
     image: ${BACKEND_IMAGE_PREFIX:-bookstore}/catalog-specialist-agent:${IMAGE_TAG:-local}
     build:
@@ -181,6 +204,30 @@ services:
       - "${MESSAGE_DRAFTER_AGENT_HOST_PORT:-8205}:8205"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8205/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  release-scout-agent:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/release-scout-agent:${IMAGE_TAG:-local}
+    profiles:
+      - local-llm
+    build:
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.release_scout.server
+    environment:
+      <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.release_scout.server
+    depends_on:
+      ollama:
+        condition: service_healthy
+      upcoming-releases-mcp:
+        condition: service_healthy
+    ports:
+      - "${RELEASE_SCOUT_AGENT_HOST_PORT:-8206}:8206"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8206/healthz').read()\""]
       interval: 10s
       timeout: 5s
       retries: 12

@@ -70,14 +70,18 @@ OPENAI_API_KEY=...
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_API_KEY=ollama
+
+TAVILY_API_KEY=tvly-...
 ```
 
-Then start the full stack with the local LLM profile so both providers can run
-in parallel:
+Then start the full stack with the local LLM profile so Ollama, Release Scout,
+and the Tavily-backed upcoming-release MCP server run in parallel:
 
 ```bash
-docker compose --profile local-llm up
+docker compose --profile local-llm up --build
 ```
+
+Open `http://localhost:3000` and choose `Release Scout`.
 
 Build only the deployable agent and MCP images:
 
