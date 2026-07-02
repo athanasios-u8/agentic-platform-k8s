@@ -12,6 +12,7 @@ class AgentSpec:
     mcp_servers: dict[str, str] = field(default_factory=dict)
     subagents: dict[str, str] = field(default_factory=dict)
     instructions: str = ""
+    model_provider: str = "openai"
 
     def card(self, url: str) -> dict[str, Any]:
         return {
@@ -19,6 +20,7 @@ class AgentSpec:
             "description": self.description,
             "url": url,
             "role": self.role,
+            "model_provider": self.model_provider,
             "capabilities": {
                 "streaming": True,
                 "a2a_json_rpc": True,

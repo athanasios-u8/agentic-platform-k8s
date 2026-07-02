@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_api_key: str = Field(default="ollama", alias="OLLAMA_API_KEY")
 
+    tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
+    tavily_search_url: str = Field(
+        default="https://api.tavily.com/search",
+        alias="TAVILY_SEARCH_URL",
+    )
+
     database_url: str = Field(
         default="postgresql://bookstore:bookstore@localhost:5432/bookstore",
         alias="DATABASE_URL",
@@ -27,6 +33,10 @@ class Settings(BaseSettings):
     store_operations_mcp_url: str = Field(
         default="http://localhost:8103/mcp",
         alias="STORE_OPERATIONS_MCP_URL",
+    )
+    upcoming_releases_mcp_url: str = Field(
+        default="http://localhost:8104/mcp",
+        alias="UPCOMING_RELEASES_MCP_URL",
     )
 
     customer_concierge_agent_url: str = Field(
@@ -48,6 +58,10 @@ class Settings(BaseSettings):
     message_drafter_agent_url: str = Field(
         default="http://localhost:8205",
         alias="MESSAGE_DRAFTER_AGENT_URL",
+    )
+    release_scout_agent_url: str = Field(
+        default="http://localhost:8206",
+        alias="RELEASE_SCOUT_AGENT_URL",
     )
 
     frontend_gateway_port: int = Field(default=8300, alias="FRONTEND_GATEWAY_PORT")

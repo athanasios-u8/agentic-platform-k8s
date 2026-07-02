@@ -6,6 +6,7 @@ from typing import Any
 from bookstore_agents.agents.common.a2a_client import A2AClient
 from bookstore_agents.agents.common.agent_cards import AgentSpec
 from bookstore_agents.agents.common.mcp_client import MCPClient
+from bookstore_agents.agents.common.ollama_runtime import OllamaTextRuntime
 from bookstore_agents.agents.common.openai_runtime import OpenAITextRuntime
 from bookstore_agents.common.approvals import WRITE_TOOLS, create_approval
 from bookstore_agents.mcp_servers.catalog.repository import CatalogRepository
@@ -19,6 +20,9 @@ class AgentRuntime:
         self.mcp_client = MCPClient(spec.mcp_servers)
         self.a2a_client = A2AClient()
         self.openai = OpenAITextRuntime()
+        self.text_runtime = (
+            OllamaTextRuntime() if spec.model_provider == "ollama" else self.openai
+        )
         self.catalog_repo = CatalogRepository()
         self.customer_repo = CustomerRepository()
         self.store_repo = StoreOperationsRepository()
@@ -45,6 +49,9 @@ class AgentRuntime:
                 yield event
         elif self.spec.slug == "store-manager":
             async for event in self._run_store_manager(message, context):
+                yield event
+        elif self.spec.slug == "release-scout":
+            async for event in self._run_release_scout(message, context):
                 yield event
         else:
             yield {"type": "final", "agent": self.spec.name, "answer": "Unknown agent."}
@@ -92,6 +99,12 @@ class AgentRuntime:
             return self.store_repo.daily_sales_summary(**arguments)
         if tool_name == "top_selling_books":
             return self.store_repo.top_selling_books(**arguments)
+        if tool_name == "search_upcoming_book_releases":
+            from bookstore_agents.mcp_servers.upcoming_releases.repository import (
+                UpcomingReleasesRepository,
+            )
+
+            return UpcomingReleasesRepository().search_upcoming_book_releases(**arguments)
         raise ValueError(f"No direct fallback for {tool_name}.")
 
     def _approval_summary(self, tool_name: str, arguments: dict[str, Any]) -> str:
@@ -130,7 +143,7 @@ class AgentRuntime:
         books = tool_result["result"]
         yield {"type": "tool_call_completed", "tool": "recommend_books", "result": books}
         fallback = self._format_book_recommendations(books)
-        answer = await self.openai.polish(
+        answer = await self.text_runtime.polish(
             self.spec.name, self.spec.instructions, message, {"books": books}, fallback
         )
         yield {"type": "final", "agent": self.spec.name, "answer": answer, "data": {"books": books}}
@@ -203,7 +216,7 @@ class AgentRuntime:
         context: dict[str, Any],
     ) -> AsyncIterator[dict[str, Any]]:
         answer = self._draft_message(message, context)
-        polished = await self.openai.polish(
+        polished = await self.text_runtime.polish(
             self.spec.name, self.spec.instructions, message, context, answer
         )
         yield {
@@ -277,7 +290,7 @@ class AgentRuntime:
                 "result": pickups["result"],
             }
             fallback = self._format_pickup_list(pickups["result"])
-            answer = await self.openai.polish(
+            answer = await self.text_runtime.polish(
                 self.spec.name,
                 self.spec.instructions,
                 message,
@@ -329,10 +342,53 @@ class AgentRuntime:
             f"{len(pickups['result'])} pickups scheduled, and "
             f"{len(low_stock['result'])} low-stock titles."
         )
-        answer = await self.openai.polish(
+        answer = await self.text_runtime.polish(
             self.spec.name, self.spec.instructions, message, data, fallback
         )
         yield {"type": "final", "agent": self.spec.name, "answer": answer, "data": data}
+
+    async def _run_release_scout(
+        self,
+        message: str,
+        context: dict[str, Any],
+    ) -> AsyncIterator[dict[str, Any]]:
+        arguments = {
+            "query": context.get("query") or message,
+            "author": context.get("author") or self._extract_author(message),
+            "theme": context.get("theme") or self._extract_release_theme(message),
+            "limit": int(context.get("limit", 5)),
+            "months_ahead": int(context.get("months_ahead", 12)),
+        }
+        yield {
+            "type": "tool_call_requested",
+            "tool": "search_upcoming_book_releases",
+            "arguments": arguments,
+        }
+        tool_result = await self._call_tool(
+            "upcoming_releases",
+            "search_upcoming_book_releases",
+            arguments,
+        )
+        release_search = tool_result["result"]
+        yield {
+            "type": "tool_call_completed",
+            "tool": "search_upcoming_book_releases",
+            "result": release_search,
+        }
+        fallback = self._format_release_search(release_search)
+        answer = await self.text_runtime.polish(
+            self.spec.name,
+            self.spec.instructions,
+            message,
+            {"release_search": release_search},
+            fallback,
+        )
+        yield {
+            "type": "final",
+            "agent": self.spec.name,
+            "answer": answer,
+            "data": {"release_search": release_search},
+        }
 
     async def _call_subagent(
         self,
@@ -514,6 +570,30 @@ class AgentRuntime:
             )
         return "\n".join(lines)
 
+    def _format_release_search(self, release_search: dict[str, Any]) -> str:
+        status = release_search.get("status")
+        if status == "missing_api_key":
+            return release_search.get("message") or "Set TAVILY_API_KEY to search releases."
+        if status == "search_error":
+            return (
+                "I could not complete the upcoming release search. "
+                f"{release_search.get('error', '')}".strip()
+            )
+        results = release_search.get("results") or []
+        if not results:
+            return "I could not find upcoming release leads for that request."
+        lines = ["Upcoming release leads from web sources:"]
+        for result in results:
+            title = result.get("title") or "Untitled source"
+            url = result.get("source_url") or ""
+            date_hint = result.get("possible_release_date") or result.get("published_date")
+            suffix = f" ({date_hint})" if date_hint else ""
+            lines.append(f"- {title}{suffix}: {url}")
+        if release_search.get("answer"):
+            lines.append("")
+            lines.append(str(release_search["answer"]))
+        return "\n".join(lines)
+
     def _draft_message(self, message: str, context: dict[str, Any]) -> str:
         reservation = context.get("reservation") or {}
         catalog = context.get("catalog") or {}
@@ -553,6 +633,31 @@ class AgentRuntime:
         if "kid" in lowered or "child" in lowered:
             return "middle grade"
         return None
+
+    def _extract_author(self, message: str) -> str | None:
+        match = re.search(r"\bby\s+([A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){0,3})", message)
+        if match:
+            return match.group(1).strip()
+        match = re.search(
+            r"\bauthor\s+([A-Z][A-Za-z'.-]+(?:\s+[A-Z][A-Za-z'.-]+){0,3})",
+            message,
+        )
+        return match.group(1).strip() if match else None
+
+    def _extract_release_theme(self, message: str) -> str | None:
+        lowered = message.lower()
+        patterns = (
+            r"upcoming\s+(.+?)\s+releases",
+            r"new\s+(.+?)\s+books",
+            r"(.+?)\s+book\s+releases",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, lowered)
+            if match:
+                theme = match.group(1).strip(" .?!")
+                if theme and theme not in {"book", "books"}:
+                    return theme
+        return self._extract_genre(message)
 
     def _extract_max_price(self, message: str) -> float | None:
         match = re.search(r"(?:under|below|less than)\s*\$?(\d+(?:\.\d+)?)", message.lower())
