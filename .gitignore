@@ -8,4 +8,5 @@ __pycache__/
 *$py.class
 .DS_Store
 deploy-secret.sh
-.OPENAI_API_KEY
+deploy-resources.sh
+.LOCAL_KEYS

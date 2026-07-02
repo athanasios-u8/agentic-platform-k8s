@@ -1,0 +1,82 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  name: release-scout
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: release-scout-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  modelAPI: llama3-2-3b
+  model: llama3.2:3b
+  mcpServers:
+    - upcoming-releases
+  config:
+    description: Finds upcoming book releases by author, theme, or genre.
+    instructions: |
+      You are the Release Scout for a local bookstore. Find upcoming book releases by
+      author, theme, or genre. Use web search results as evidence, cite useful source
+      URLs, and clearly distinguish confirmed release dates from weaker release leads.
+    reasoningLoopMaxSteps: 5
+  agentNetwork:
+    expose: true
+    access: []
+  container:
+    image: bookstore/release-scout-agent:local
+    env:
+      - name: BOOKSTORE_SERVICE_MODULE
+        value: bookstore_agents.agents.release_scout.server
+      - name: RELEASE_SCOUT_AGENT_PORT
+        value: "8000"
+      - name: OLLAMA_MODEL
+        valueFrom:
+          configMapKeyRef:
+            name: bookstore-config
+            key: OLLAMA_MODEL
+      - name: OLLAMA_BASE_URL
+        valueFrom:
+          configMapKeyRef:
+            name: bookstore-config
+            key: OLLAMA_BASE_URL
+      - name: OLLAMA_API_KEY
+        valueFrom:
+          configMapKeyRef:
+            name: bookstore-config
+            key: OLLAMA_API_KEY
+      - name: UPCOMING_RELEASES_MCP_URL
+        value: http://mcpserver-upcoming-releases:8000/mcp
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: DATABASE_URL
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  podSpec:
+    enableServiceLinks: false
+    containers:
+      - name: agent
+        envFrom:
+          - configMapRef:
+              name: bookstore-config
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
