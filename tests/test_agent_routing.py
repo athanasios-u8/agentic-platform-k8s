@@ -5,6 +5,7 @@ from bookstore_agents.agents.message_drafter.agent import get_spec as drafter_sp
 from bookstore_agents.agents.release_scout.agent import get_spec as release_scout_spec
 from bookstore_agents.agents.reservation_specialist.agent import get_spec as reservation_spec
 from bookstore_agents.agents.store_manager.agent import get_spec as manager_spec
+from bookstore_agents.common.config import get_settings
 
 
 def test_agent_roles_and_independent_ports() -> None:
@@ -28,11 +29,17 @@ def test_message_drafter_has_no_tools() -> None:
     assert spec.subagents == {}
 
 
-def test_release_scout_uses_ollama_and_upcoming_releases_mcp() -> None:
-    spec = release_scout_spec()
-    assert spec.model_provider == "ollama"
-    assert spec.mcp_servers == {"upcoming_releases": "http://localhost:8104/mcp"}
-    assert spec.subagents == {}
+def test_release_scout_uses_ollama_and_upcoming_releases_mcp(monkeypatch) -> None:
+    monkeypatch.setenv("UPCOMING_RELEASES_MCP_URL", "http://localhost:8104/mcp")
+    get_settings.cache_clear()
+
+    try:
+        spec = release_scout_spec()
+        assert spec.model_provider == "ollama"
+        assert spec.mcp_servers == {"upcoming_releases": "http://localhost:8104/mcp"}
+        assert spec.subagents == {}
+    finally:
+        get_settings.cache_clear()
 
 
 def test_master_agents_can_reach_subagents() -> None:

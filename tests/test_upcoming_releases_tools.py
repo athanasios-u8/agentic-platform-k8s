@@ -5,7 +5,7 @@ from bookstore_agents.mcp_servers.upcoming_releases.repository import (
 
 
 def test_upcoming_releases_returns_missing_api_key(monkeypatch):
-    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.setenv("TAVILY_API_KEY", "")
     get_settings.cache_clear()
 
     try:
