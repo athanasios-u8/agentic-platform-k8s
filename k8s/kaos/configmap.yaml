@@ -23,6 +23,7 @@ data:
   RESERVATION_SPECIALIST_AGENT_URL: http://agent-reservation-specialist:8000
   MESSAGE_DRAFTER_AGENT_URL: http://agent-message-drafter:8000
   FRONTEND_GATEWAY_PORT: "8300"
+  FRONTEND_GATEWAY_PUBLIC_URL: http://localhost:8300
   CHATKIT_API_PATH: /chatkit
   APPROVAL_REQUIRED_FOR_WRITES: "true"
   APPROVAL_STATE_STORE: postgres

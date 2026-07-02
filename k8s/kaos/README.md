@@ -12,6 +12,8 @@ It assumes the KAOS operator and CRDs are already installed in the cluster.
 - `MCPServer/customer`: existing Customer FastMCP server as a custom runtime
 - `MCPServer/store-operations`: existing Store Operations FastMCP server as a custom runtime
 - Five `Agent` resources that run the existing bookstore agent images
+- `frontend-gateway`: API gateway for chat and approvals
+- `frontend`: browser UI served by nginx
 - Postgres, config, secret, and demo-data reset resources needed by the bookstore stack
 
 ## Layout
@@ -35,6 +37,8 @@ Each deployable unit has its own folder and local `kustomization.yaml`:
 - `message-drafter-agent/`
 - `customer-concierge-agent/`
 - `store-manager-agent/`
+- `frontend-gateway/`
+- `frontend/`
 
 The custom agent images preserve the current bookstore runtime behavior,
 including the human approval flow for mutating tools. The agents receive
@@ -46,7 +50,7 @@ proxy URL.
 Build and make the images available to your cluster first:
 
 ```bash
-make docker-build-backend-images
+make docker-build-all-images
 ```
 
 For a shared cluster, push the images and update the `image:` fields in
@@ -77,3 +81,18 @@ KAOS will create workload services named:
 - `agent-message-drafter`
 - `agent-customer-concierge`
 - `agent-store-manager`
+- `frontend-gateway`
+- `frontend`
+
+For local browser testing, port-forward both browser-facing services:
+
+```bash
+kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
+kubectl -n bookstore port-forward svc/frontend 3000:80
+```
+
+Then open:
+
+```text
+http://localhost:3000
+```

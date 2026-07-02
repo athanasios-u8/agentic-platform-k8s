@@ -16,3 +16,5 @@ resources:
   - message-drafter-agent
   - customer-concierge-agent
   - store-manager-agent
+  - frontend-gateway
+  - frontend

@@ -1,0 +1,66 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-gateway
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: frontend-gateway
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: frontend-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: frontend-gateway
+        app.kubernetes.io/component: gateway
+        app.kubernetes.io/part-of: bookstore-agents
+    spec:
+      containers:
+        - name: frontend-gateway
+          image: bookstore/frontend-gateway:local
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: bookstore-config
+          env:
+            - name: BOOKSTORE_SERVICE_MODULE
+              value: bookstore_agents.frontend_gateway.server
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: bookstore-secrets
+                  key: DATABASE_URL
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: bookstore-secrets
+                  key: OPENAI_API_KEY
+          ports:
+            - name: http
+              containerPort: 8300
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
