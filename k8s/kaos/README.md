@@ -8,6 +8,7 @@ It assumes the KAOS operator and CRDs are already installed in the cluster.
 ## What This Deploys
 
 - `ModelAPI/openai`: LiteLLM proxy to OpenAI using `gpt-5.5`
+- `ModelAPI/llama3-2-3b`: hosted Ollama model using `llama3.2:3b`
 - `MCPServer/catalog`: existing Catalog FastMCP server as a custom runtime
 - `MCPServer/customer`: existing Customer FastMCP server as a custom runtime
 - `MCPServer/store-operations`: existing Store Operations FastMCP server as a custom runtime
@@ -29,6 +30,7 @@ Each deployable unit has its own folder and local `kustomization.yaml`:
 - `postgres/`
 - `reset-demo-data/`
 - `openai-modelapi/`
+- `llama3-2-3b-modelapi/`
 - `catalog-mcp/`
 - `customer-mcp/`
 - `store-operations-mcp/`
@@ -73,6 +75,7 @@ kubectl -n bookstore get deploy,svc
 KAOS will create workload services named:
 
 - `modelapi-openai`
+- `modelapi-llama3-2-3b`
 - `mcpserver-catalog`
 - `mcpserver-customer`
 - `mcpserver-store-operations`

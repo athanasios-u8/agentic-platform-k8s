@@ -8,6 +8,7 @@ resources:
   - postgres
   - reset-demo-data
   - openai-modelapi
+  - llama3-2-3b-modelapi
   - catalog-mcp
   - customer-mcp
   - store-operations-mcp

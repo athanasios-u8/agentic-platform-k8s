@@ -1,0 +1,24 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: ModelAPI
+metadata:
+  name: llama3-2-3b
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: llama3-2-3b
+    app.kubernetes.io/component: modelapi
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  mode: Hosted
+  hostedConfig:
+    model: "llama3.2:3b"
+  gatewayRoute:
+    timeout: "120s"
+  container:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 4Gi
+      limits:
+        cpu: "2"
+        memory: 8Gi
