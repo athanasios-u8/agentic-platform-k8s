@@ -1,3 +1,6 @@
+import pytest
+
+from bookstore_agents.agents.common.ollama_runtime import OllamaTextRuntime
 from bookstore_agents.agents.common.openai_runtime import OpenAITextRuntime
 from bookstore_agents.common.config import get_settings
 
@@ -44,5 +47,80 @@ def test_openai_and_ollama_settings_are_independent(monkeypatch):
         assert settings.ollama_model == "llama3.2:3b"
         assert settings.ollama_base_url == "http://ollama:11434"
         assert settings.ollama_api_key == "ollama"
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_ollama_runtime_posts_to_native_chat_api(monkeypatch):
+    calls = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"message": {"content": "Ollama polished answer"}}
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            calls["timeout"] = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, json):
+            calls["url"] = url
+            calls["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setenv("OLLAMA_MODEL", "llama3.2:3b")
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434/")
+    monkeypatch.setattr(
+        "bookstore_agents.agents.common.ollama_runtime.httpx.AsyncClient",
+        FakeAsyncClient,
+    )
+    get_settings.cache_clear()
+
+    try:
+        runtime = OllamaTextRuntime()
+        result = await runtime.polish("Release Scout", "Instructions", "Prompt", {}, "fallback")
+        assert result == "Ollama polished answer"
+        assert calls["url"] == "http://ollama:11434/api/chat"
+        assert calls["json"]["model"] == "llama3.2:3b"
+        assert calls["json"]["stream"] is False
+        assert calls["json"]["messages"][0]["role"] == "user"
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_ollama_runtime_returns_fallback_on_error(monkeypatch):
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def post(self, url, json):
+            raise RuntimeError("ollama unavailable")
+
+    monkeypatch.setattr(
+        "bookstore_agents.agents.common.ollama_runtime.httpx.AsyncClient",
+        FakeAsyncClient,
+    )
+    get_settings.cache_clear()
+
+    try:
+        runtime = OllamaTextRuntime()
+        result = await runtime.polish("Release Scout", "Instructions", "Prompt", {}, "fallback")
+        assert result == "fallback"
     finally:
         get_settings.cache_clear()

@@ -2,6 +2,7 @@ from bookstore_agents.agents.catalog_specialist.agent import get_spec as catalog
 from bookstore_agents.agents.common.runtime import AgentRuntime
 from bookstore_agents.agents.customer_concierge.agent import get_spec as concierge_spec
 from bookstore_agents.agents.message_drafter.agent import get_spec as drafter_spec
+from bookstore_agents.agents.release_scout.agent import get_spec as release_scout_spec
 from bookstore_agents.agents.reservation_specialist.agent import get_spec as reservation_spec
 from bookstore_agents.agents.store_manager.agent import get_spec as manager_spec
 
@@ -13,16 +14,24 @@ def test_agent_roles_and_independent_ports() -> None:
         catalog_spec(),
         reservation_spec(),
         drafter_spec(),
+        release_scout_spec(),
     ]
     assert {spec.role for spec in specs} == {"master", "subagent"}
     assert [spec.role for spec in specs].count("master") == 2
-    assert [spec.role for spec in specs].count("subagent") == 3
-    assert len({spec.port for spec in specs}) == 5
+    assert [spec.role for spec in specs].count("subagent") == 4
+    assert len({spec.port for spec in specs}) == 6
 
 
 def test_message_drafter_has_no_tools() -> None:
     spec = drafter_spec()
     assert spec.mcp_servers == {}
+    assert spec.subagents == {}
+
+
+def test_release_scout_uses_ollama_and_upcoming_releases_mcp() -> None:
+    spec = release_scout_spec()
+    assert spec.model_provider == "ollama"
+    assert spec.mcp_servers == {"upcoming_releases": "http://localhost:8104/mcp"}
     assert spec.subagents == {}
 
 
