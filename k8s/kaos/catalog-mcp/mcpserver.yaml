@@ -36,3 +36,7 @@ spec:
       limits:
         cpu: 500m
         memory: 512Mi
+  podSpec:
+    enableServiceLinks: false
+    containers:
+      - name: mcp-server

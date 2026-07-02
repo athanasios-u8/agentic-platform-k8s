@@ -9,19 +9,27 @@ data:
   CATALOG_MCP_PORT: "8000"
   CUSTOMER_MCP_PORT: "8000"
   STORE_OPERATIONS_MCP_PORT: "8000"
+  UPCOMING_RELEASES_MCP_PORT: "8000"
   CATALOG_MCP_URL: http://mcpserver-catalog:8000/mcp
   CUSTOMER_MCP_URL: http://mcpserver-customer:8000/mcp
   STORE_OPERATIONS_MCP_URL: http://mcpserver-store-operations:8000/mcp
+  UPCOMING_RELEASES_MCP_URL: http://mcpserver-upcoming-releases:8000/mcp
   CUSTOMER_CONCIERGE_AGENT_PORT: "8000"
   STORE_MANAGER_AGENT_PORT: "8000"
   CATALOG_SPECIALIST_AGENT_PORT: "8000"
   RESERVATION_SPECIALIST_AGENT_PORT: "8000"
   MESSAGE_DRAFTER_AGENT_PORT: "8000"
+  RELEASE_SCOUT_AGENT_PORT: "8000"
   CUSTOMER_CONCIERGE_AGENT_URL: http://agent-customer-concierge:8000
   STORE_MANAGER_AGENT_URL: http://agent-store-manager:8000
   CATALOG_SPECIALIST_AGENT_URL: http://agent-catalog-specialist:8000
   RESERVATION_SPECIALIST_AGENT_URL: http://agent-reservation-specialist:8000
   MESSAGE_DRAFTER_AGENT_URL: http://agent-message-drafter:8000
+  RELEASE_SCOUT_AGENT_URL: http://agent-release-scout:8000
+  OLLAMA_MODEL: llama3.2:3b
+  OLLAMA_BASE_URL: http://modelapi-llama3-2-3b:11434
+  OLLAMA_API_KEY: ollama
+  TAVILY_SEARCH_URL: https://api.tavily.com/search
   FRONTEND_GATEWAY_PORT: "8300"
   FRONTEND_GATEWAY_PUBLIC_URL: http://localhost:8300
   CHATKIT_API_PATH: /chatkit

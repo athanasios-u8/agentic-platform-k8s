@@ -12,9 +12,11 @@ resources:
   - catalog-mcp
   - customer-mcp
   - store-operations-mcp
+  - upcoming-releases-mcp
   - catalog-specialist-agent
   - reservation-specialist-agent
   - message-drafter-agent
+  - release-scout-agent
   - customer-concierge-agent
   - store-manager-agent
   - frontend-gateway

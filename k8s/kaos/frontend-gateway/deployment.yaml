@@ -20,6 +20,7 @@ spec:
         app.kubernetes.io/component: gateway
         app.kubernetes.io/part-of: bookstore-agents
     spec:
+      enableServiceLinks: false
       containers:
         - name: frontend-gateway
           image: bookstore/frontend-gateway:local

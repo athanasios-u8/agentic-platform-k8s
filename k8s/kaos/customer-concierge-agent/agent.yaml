@@ -62,6 +62,7 @@ spec:
         cpu: 500m
         memory: 512Mi
   podSpec:
+    enableServiceLinks: false
     containers:
       - name: agent
         envFrom:
