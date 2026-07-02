@@ -2,27 +2,29 @@
 
 ## Overview
 
-This scenario describes a small bookstore assistant platform made of five independently callable agents. The agents focus only on bookstore workflows: customer discovery, book reservations, store operations, and message drafting.
+This scenario describes a small bookstore assistant platform made of six independently callable agents. The agents focus only on bookstore workflows: customer discovery, book reservations, store operations, message drafting, and upcoming release scouting.
 
 The platform demonstrates:
 
-- Five agents total
-- Three subagents and two master agents
+- Six agents total
+- Four subagents and two master agents
 - Every agent callable independently
 - MCP tool connectivity for most agents
 - One subagent with no tools
+- One Ollama-backed subagent for internet-backed release scouting
 - Master-to-subagent A2A communication
 - Database-backed read and write workflows
 
 ## MCP Server Split
 
-Use three MCP servers. This keeps the demo simple while still showing clear capability boundaries.
+Use four MCP servers. This keeps the demo simple while still showing clear capability boundaries.
 
 | MCP server | Owns | Why this split works |
 |---|---|---|
 | Catalog MCP | Books, authors, categories, recommendations | Mostly read-heavy discovery and search behavior. |
 | Store Operations MCP | Inventory, reservations, sales | Operational workflows often need joins across stock, reservations, and sales. |
 | Customer MCP | Customers, loyalty status, preferences | Keeps customer data isolated from product and store operations. |
+| Upcoming Releases MCP | Internet search for upcoming releases | Keeps external Tavily-backed web search separate from internal bookstore data. |
 
 ## Agents
 
@@ -33,6 +35,7 @@ Use three MCP servers. This keeps the demo simple while still showing clear capa
 | Catalog Specialist | Subagent | Yes | Catalog MCP | Searches and recommends books based on genre, budget, author, age range, mood, popularity, or availability constraints. |
 | Reservation Specialist | Subagent | Yes | Store Operations MCP, Customer MCP | Creates, updates, cancels, and reviews reservations through approval-gated write flows; checks whether a customer has existing pickups or loyalty benefits. |
 | Message Drafter | Subagent | Yes | No tools | Turns supplied context into polished customer messages, staff briefings, pickup confirmations, or apology notes. |
+| Release Scout | Subagent | Yes | Upcoming Releases MCP | Searches for upcoming book releases by theme, genre, or author, then uses local Ollama `llama3.2:3b` to summarize source-backed leads. |
 
 ## Agent Descriptions
 
@@ -119,16 +122,43 @@ Example request:
 
 > Turn these reservation details into a friendly pickup confirmation.
 
+### Release Scout
+
+The Release Scout is an independently callable subagent for upcoming releases. It
+does not change existing recommendations, reservations, or store operations. It
+uses the Upcoming Releases MCP server for Tavily-backed internet search and uses
+Ollama `llama3.2:3b` for final source-backed answers.
+
+Typical responsibilities:
+
+- Search for upcoming releases by theme, genre, or author
+- Surface source URLs and preorder or publisher evidence
+- Distinguish confirmed dates from weaker release leads
+- Return useful leads without mutating bookstore data
+
+Example request:
+
+> Find upcoming cozy fantasy releases.
+
 ## A2A Topology
 
 ```mermaid
 flowchart TD
+  GW["Frontend Gateway\nagent selector"]
   CC["Customer Concierge\nMaster Agent"]
   SM["Store Manager\nMaster Agent"]
 
   CS["Catalog Specialist\nSubagent"]
   RS["Reservation Specialist\nSubagent"]
   MD["Message Drafter\nSubagent, no tools"]
+  Scout["Release Scout\nSubagent, Ollama"]
+
+  GW --> CC
+  GW --> SM
+  GW --> CS
+  GW --> RS
+  GW --> MD
+  GW --> Scout
 
   CC -->|A2A| CS
   CC -->|A2A| RS
@@ -137,6 +167,46 @@ flowchart TD
   SM -->|A2A| CS
   SM -->|A2A| RS
   SM -->|A2A| MD
+```
+
+## Runtime And Tool Topology
+
+```mermaid
+flowchart LR
+  subgraph "OpenAI-backed agents"
+    CC["Customer Concierge"]
+    SM["Store Manager"]
+    CS["Catalog Specialist"]
+    RS["Reservation Specialist"]
+    MD["Message Drafter"]
+  end
+
+  Scout["Release Scout\nOllama-backed"]
+
+  Catalog["Catalog MCP"]
+  Customer["Customer MCP"]
+  StoreOps["Store Operations MCP"]
+  Upcoming["Upcoming Releases MCP"]
+
+  DB[("PostgreSQL")]
+  Tavily["Tavily Search API"]
+  Ollama["Ollama llama3.2:3b"]
+
+  CC --> Catalog
+  CC --> Customer
+  CC --> StoreOps
+  SM --> Catalog
+  SM --> StoreOps
+  CS --> Catalog
+  RS --> Customer
+  RS --> StoreOps
+  Scout --> Upcoming
+  Scout --> Ollama
+
+  Catalog --> DB
+  Customer --> DB
+  StoreOps --> DB
+  Upcoming --> Tavily
 ```
 
 ## Example Customer Reservation Flow
@@ -156,11 +226,38 @@ sequenceDiagram
   User->>CC: Ask for a mystery novel under $20
   CC->>CS: Find suitable books
   CS-->>CC: Recommended titles
-  CC->>RS: Check stock and create reservation
-  RS-->>CC: Reservation confirmed
+  CC->>RS: Check stock and propose reservation
+  RS-->>CC: Approval required for write
   CC->>MD: Draft customer confirmation
-  MD-->>CC: Friendly pickup message
-  CC-->>User: Recommendation and reservation confirmation
+  MD-->>CC: Friendly pending-confirmation message
+  CC-->>User: Recommendation and approval-pending reservation details
+```
+
+## Example Release Scout Flow
+
+A shopper asks:
+
+> What new books by Stephen King are coming soon?
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant GW as Frontend Gateway
+  participant Scout as Release Scout
+  participant UR as Upcoming Releases MCP
+  participant Web as Tavily Search API
+  participant Ollama as Ollama llama3.2:3b
+
+  User->>GW: Select Release Scout and ask about upcoming releases
+  GW->>Scout: Send release-scout chat request
+  Scout->>UR: search_upcoming_book_releases
+  UR->>Web: Search web sources
+  Web-->>UR: Source results and snippets
+  UR-->>Scout: Structured release leads
+  Scout->>Ollama: Polish source-backed answer
+  Ollama-->>Scout: Final summary
+  Scout-->>GW: Answer with source URLs
+  GW-->>User: Upcoming release leads
 ```
 
 ## Example Staff Briefing Flow
@@ -220,6 +317,7 @@ human approves the request through the frontend or gateway API.
 | Customer MCP | `get_customer` | Retrieve customer profile details. |
 | Customer MCP | `lookup_loyalty_status` | Check loyalty tier or benefits. |
 | Customer MCP | `update_customer_preferences` | Add or update customer reading preferences. |
+| Upcoming Releases MCP | `search_upcoming_book_releases` | Search the web for upcoming releases by author, theme, or genre. |
 
 ## Example Pickup Cancellation Flow
 

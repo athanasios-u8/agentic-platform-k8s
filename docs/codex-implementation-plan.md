@@ -2,7 +2,20 @@
 
 ## Goal
 
-Implement the Local Bookstore Assistant as a modular, Dockerized Python project. The system should include five independently callable agents, three independently runnable MCP servers, PostgreSQL-backed sample data, fake data loading scripts, and clear command documentation for local development.
+Implement the Local Bookstore Assistant as a modular, Dockerized Python project. The system should include independently callable agents, independently runnable MCP servers, PostgreSQL-backed sample data, fake data loading scripts, and clear command documentation for local development.
+
+## Current Implementation Note
+
+This document began as the implementation plan. The current repository extends
+that plan with six independently callable agents, four MCP servers, a Tavily-
+backed Upcoming Releases MCP server, a Release Scout subagent, and KAOS
+manifests in `k8s/kaos` for the full Kubernetes deployment.
+
+The active runtime is a custom Python agent runtime with A2A-style endpoints,
+FastMCP clients, OpenAI Responses final-answer polishing for the existing
+bookstore agents, and Ollama `/api/chat` final-answer polishing for Release
+Scout. The `openai-agents` dependency remains available, but the current code
+does not use the OpenAI Agents SDK as the primary runtime.
 
 ## Technical Direction
 
@@ -12,7 +25,8 @@ Use:
 - FastMCP for MCP servers and tools
 - A2A for agent-to-agent communication
 - A2A JSON-RPC streaming for agent-to-agent calls
-- OpenAI Python SDK and OpenAI Agents SDK for model calls, tool choice, streaming, approvals, and tracing
+- OpenAI Python SDK for OpenAI-backed final answer polishing
+- Ollama native `/api/chat` for Release Scout final answer polishing
 - ChatKit custom server integration for the browser-facing frontend
 - PostgreSQL for sample bookstore data
 - `uv` for virtual environments, dependency management, locking, and command execution
@@ -22,15 +36,13 @@ Use:
 - `.env.example` for required environment variables
 - Health and readiness endpoints for all HTTP services
 
-Current documentation checks:
+Documentation references that informed the original plan:
 
 - FastMCP supports defining tools with `@mcp.tool` and running servers over HTTP with `mcp.run(transport="http", host="0.0.0.0", port=...)`.
 - FastMCP clients can connect to HTTP MCP servers, list available tools, and call tools with `Client(...).list_tools()` and `Client(...).call_tool(...)`.
-- A2A Python SDK supports agent servers, agent cards, and clients that can connect to another agent URL and send messages.
-- OpenAI Agents SDK is the preferred backend path when the application owns orchestration, tool execution, state, MCP connectivity, and approvals.
-- OpenAI Agents SDK supports streamed runs and approval interruptions that can be resumed from run state.
-- OpenAI Agents SDK supports local/private MCP connectivity when the application should own the MCP connection.
-- ChatKit supports custom server integrations that can run on our own infrastructure and connect to an Agents SDK backend.
+- A2A Python SDK supports agent servers, agent cards, and clients that can connect to another agent URL and send messages. The current code exposes A2A-style endpoints through shared FastAPI helpers.
+- OpenAI Agents SDK was evaluated for orchestration, streamed runs, approval interruptions, and MCP connectivity. The dependency remains available, but the current implementation uses the custom Python runtime described above.
+- ChatKit supports custom server integrations that can run on our own infrastructure and connect to a server-owned agent backend.
 - ChatKit is the selected frontend path for this project.
 - `uv` supports project management with `uv add`, `uv lock`, `uv sync`, and `uv run`; Docker builds can install locked dependencies with `uv sync --locked` or `uv sync --frozen`.
 
@@ -82,6 +94,11 @@ Current documentation checks:
 |       |   |   +-- repository.py
 |       |   |   +-- tools.py
 |       |   +-- store_operations/
+|       |   |   +-- __init__.py
+|       |   |   +-- server.py
+|       |   |   +-- repository.py
+|       |   |   +-- tools.py
+|       |   +-- upcoming_releases/
 |       |       +-- __init__.py
 |       |       +-- server.py
 |       |       +-- repository.py
@@ -93,6 +110,7 @@ Current documentation checks:
 |           |   +-- a2a_client.py
 |           |   +-- agent_cards.py
 |           |   +-- mcp_client.py
+|           |   +-- ollama_runtime.py
 |           |   +-- openai_runtime.py
 |           |   +-- prompts.py
 |           |   +-- runtime.py
@@ -119,6 +137,11 @@ Current documentation checks:
 |           |   +-- executor.py
 |           |   +-- server.py
 |           +-- message_drafter/
+|           |   +-- __init__.py
+|           |   +-- agent.py
+|           |   +-- executor.py
+|           |   +-- server.py
+|           +-- release_scout/
 |               +-- __init__.py
 |               +-- agent.py
 |               +-- executor.py
@@ -136,6 +159,10 @@ Current documentation checks:
     +-- test_customer_tools.py
     +-- test_store_operations_tools.py
     +-- test_agent_routing.py
+    +-- test_agent_server_kaos_compat.py
+    +-- test_openai_runtime.py
+    +-- test_release_scout.py
+    +-- test_upcoming_releases_tools.py
 ```
 
 All `__init__.py` files should be intentionally empty.
@@ -169,6 +196,15 @@ OPENAI_API_KEY=
 OPENAI_MODEL=
 OPENAI_TRACING_ENABLED=
 
+OLLAMA_MODEL=
+OLLAMA_BASE_URL=
+OLLAMA_API_KEY=
+OLLAMA_HOST_PORT=
+OLLAMA_IMAGE_TAG=
+
+TAVILY_API_KEY=
+TAVILY_SEARCH_URL=
+
 POSTGRES_PORT=
 POSTGRES_DB=
 POSTGRES_USER=
@@ -184,6 +220,9 @@ CUSTOMER_MCP_URL=
 STORE_OPERATIONS_MCP_PORT=
 STORE_OPERATIONS_MCP_HOST_PORT=
 STORE_OPERATIONS_MCP_URL=
+UPCOMING_RELEASES_MCP_PORT=
+UPCOMING_RELEASES_MCP_HOST_PORT=
+UPCOMING_RELEASES_MCP_URL=
 
 CUSTOMER_CONCIERGE_AGENT_PORT=
 CUSTOMER_CONCIERGE_AGENT_HOST_PORT=
@@ -200,6 +239,9 @@ RESERVATION_SPECIALIST_AGENT_URL=
 MESSAGE_DRAFTER_AGENT_PORT=
 MESSAGE_DRAFTER_AGENT_HOST_PORT=
 MESSAGE_DRAFTER_AGENT_URL=
+RELEASE_SCOUT_AGENT_PORT=
+RELEASE_SCOUT_AGENT_HOST_PORT=
+RELEASE_SCOUT_AGENT_URL=
 
 FRONTEND_GATEWAY_PORT=
 FRONTEND_GATEWAY_HOST_PORT=
@@ -301,6 +343,19 @@ Responsibilities:
 - Summarize sales
 - Enforce simple stock constraints for reservations
 
+### Upcoming Releases MCP
+
+Tools:
+
+- `search_upcoming_book_releases`
+
+Responsibilities:
+
+- Search for upcoming releases by author, theme, genre, or audience
+- Use Tavily as the external internet search provider
+- Return structured status values such as `ok`, `missing_api_key`, and `search_error`
+- Keep internet-search credentials out of frontend and browser containers
+
 Each MCP server should:
 
 - Use FastMCP tool definitions
@@ -318,24 +373,33 @@ Implement each agent as an independently runnable A2A server.
 
 ### Agent Runtime Design
 
-Each agent should use the OpenAI Agents SDK internally. A2A is the external service protocol that makes every agent independently callable; the OpenAI Agents SDK is the internal model/tool runtime.
+Each agent runs as an independently callable FastAPI service. A2A-style
+endpoints are the external service protocol, while the current internal runtime
+uses explicit Python orchestration, FastMCP tool discovery and calls,
+deterministic direct repository fallbacks for core demo flows, approval gates
+for write tools, and provider-specific final-answer polishing.
 
 Tool behavior:
 
 - Agents should be connected to their assigned MCP servers.
 - At startup, each agent should discover available MCP tools for its assigned servers.
-- The LLM should decide whether to call available tools during the run.
-- Do not hard-code deterministic tool routing except for safety checks, approval gates, and demo fallback behavior.
-- Use the OpenAI Agents SDK MCP integration when it supports the chosen local/private transport cleanly.
-- If local HTTP MCP support is awkward in the SDK, wrap FastMCP client calls as OpenAI Agents SDK function tools. The function tools should still be generated from MCP tool metadata where practical.
-- Leave `tool_choice` model-driven by default unless a specific demo or test needs to force a tool.
+- The runtime chooses the supported demo tool flow from the selected agent and
+  user request. Final-answer polishing may use OpenAI or Ollama depending on
+  the agent's configured `model_provider`.
+- Keep deterministic routing focused on demo flows, safety checks, approval
+  gates, and fallbacks. Future model-driven tool selection can still be added
+  behind the same A2A and MCP boundaries.
 
-Master agents may use their own MCP tools and may also call subagents over A2A. For presentation flows, prompts should encourage delegation to the relevant subagent, but the runtime should still allow the model to choose direct tool use when that is the better path.
+Master agents may use their own MCP tools and may also call subagents over A2A.
+For presentation flows, the runtime delegates to the relevant subagent when the
+requested workflow calls for it, while keeping direct tool use available for
+simple master-agent scenarios.
 
 Streaming behavior:
 
-- Use `Runner.run_streamed` or the equivalent current Agents SDK streaming API inside each agent.
-- Forward useful streaming events through the A2A JSON-RPC streaming response.
+- Forward useful runtime events through `/a2a/stream` as NDJSON and through
+  `/v1/chat/completions` as SSE chunks when OpenAI-compatible streaming is
+  requested.
 - Preserve tool-call, subagent-call, approval, and final-output events in the trace where possible.
 
 ### Customer Concierge
@@ -424,6 +488,22 @@ Responsibilities:
 - Draft apology notes
 - Draft staff briefings
 
+### Release Scout
+
+Type: subagent
+
+Connections:
+
+- Upcoming Releases MCP
+- Ollama model runtime
+
+Responsibilities:
+
+- Search the internet for upcoming book releases by theme, genre, or author
+- Use Tavily-backed source results from the Upcoming Releases MCP server
+- Use Ollama `llama3.2:3b` for source-backed final-answer polishing
+- Stay independent from existing OpenAI-backed agents unless a user selects it directly
+
 ## Phase 5: A2A Wiring
 
 1. Expose an A2A JSON-RPC streaming endpoint for every agent.
@@ -494,7 +574,9 @@ The frontend should let a user:
 - Approve or reject write actions
 - Inspect final results and relevant structured data
 
-Use a ChatKit-oriented custom Python server and connect it to the OpenAI Agents SDK backend through the A2A services. This keeps orchestration in Python while giving the demo a polished streaming chat UI.
+Use a ChatKit-oriented custom Python server and connect it to the Python A2A
+services. This keeps orchestration in Python while giving the demo a polished
+streaming chat UI.
 
 Frontend components:
 
@@ -515,7 +597,7 @@ Frontend components:
 `frontend` responsibilities:
 
 - Provide a simple browser UI for the demo.
-- Let the user select any of the five agents.
+- Let the user select any of the six agents.
 - Display starter prompts for customer and staff scenarios.
 - Connect to `frontend-gateway` using `FRONTEND_GATEWAY_PUBLIC_URL`; keep `CHATKIT_API_PATH` available for the ChatKit adapter.
 - Show streamed responses, inline run timelines, and approval cards.
@@ -537,14 +619,17 @@ Use Docker Compose services for:
 - `catalog-mcp`
 - `customer-mcp`
 - `store-operations-mcp`
+- `upcoming-releases-mcp` in the optional `local-llm` profile
 - `customer-concierge-agent`
 - `store-manager-agent`
 - `catalog-specialist-agent`
 - `reservation-specialist-agent`
 - `message-drafter-agent`
+- `release-scout-agent` in the optional `local-llm` profile
 - `frontend-gateway`
 - `frontend`
 - `bookstore-cli` for one-off database scripts
+- `ollama` and `ollama-pull` in the optional `local-llm` profile
 
 Use one reusable Python application Dockerfile for MCP servers, agents, `frontend-gateway`, and `bookstore-cli`. Each long-running Python service sets `BOOKSTORE_SERVICE_MODULE` so the same image layout can run a different module entrypoint; one-off CLI jobs can override the container args with `python -m ...`.
 
@@ -559,10 +644,15 @@ Docker requirements:
 - Mount source code in development if live editing is desired.
 - Add health checks for all long-running services.
 - Set `frontend` to depend on `frontend-gateway`.
-- Set `frontend-gateway` to depend on the five agent services.
+- Set `frontend-gateway` to depend on the default OpenAI-backed agent services.
+  In Docker Compose, Release Scout is part of the optional `local-llm` profile.
+- Make `release-scout-agent` depend on healthy `ollama`, completed `ollama-pull`,
+  and healthy `upcoming-releases-mcp`.
 - Keep `OPENAI_API_KEY` available only to backend services that need model access, not to the browser-facing frontend container.
 - Build deployable agent and MCP images with service-specific image tags such as `bookstore/catalog-mcp:local` and `bookstore/customer-concierge-agent:local`.
-- Keep Kubernetes manifests under `k8s/base`, with one folder per deployable unit. For example, `k8s/base/catalog-mcp/service.yaml` and `k8s/base/catalog-mcp/deployment.yaml`.
+- Keep plain Kubernetes manifests under `k8s/base` for the original core stack.
+  Use `k8s/kaos` for the current full stack with KAOS `ModelAPI`,
+  `MCPServer`, and `Agent` resources.
 
 ## Phase 9: Command Documentation
 
@@ -580,10 +670,12 @@ docker compose run --rm bookstore-cli python -m scripts.reset_demo_data
 docker compose up
 docker compose logs -f catalog-mcp
 docker compose logs -f customer-concierge-agent
+docker compose logs -f release-scout-agent
 docker compose logs -f frontend-gateway
 docker compose logs -f frontend
 make docker-build-agent-mcp-images
-kubectl apply -k k8s/base
+bash deploy-secret.sh
+kubectl kustomize k8s/kaos | yq 'select(.kind != "Secret" or .metadata.name != "bookstore-secrets")' | kubectl apply -f -
 ```
 
 Also include direct local commands for starting each server without Docker:
@@ -592,11 +684,13 @@ Also include direct local commands for starting each server without Docker:
 uv run python -m bookstore_agents.mcp_servers.catalog.server
 uv run python -m bookstore_agents.mcp_servers.customer.server
 uv run python -m bookstore_agents.mcp_servers.store_operations.server
+uv run python -m bookstore_agents.mcp_servers.upcoming_releases.server
 uv run python -m bookstore_agents.agents.customer_concierge.server
 uv run python -m bookstore_agents.agents.store_manager.server
 uv run python -m bookstore_agents.agents.catalog_specialist.server
 uv run python -m bookstore_agents.agents.reservation_specialist.server
 uv run python -m bookstore_agents.agents.message_drafter.server
+uv run python -m bookstore_agents.agents.release_scout.server
 uv run python -m bookstore_agents.frontend_gateway.server
 ```
 
@@ -624,6 +718,10 @@ Add focused tests for:
 - Master agent routing decisions
 - Message Drafter output formatting with supplied context
 - Frontend gateway streaming adapter
+- Ollama runtime request construction and fallback behavior
+- Release Scout routing and provider isolation
+- Upcoming Releases MCP missing-key and Tavily-response handling
+- Frontend static selector coverage for Release Scout
 
 Prefer repository and tool-level tests first. Add end-to-end Docker Compose smoke tests after the basic system works locally.
 
@@ -640,12 +738,12 @@ Update or create:
 
 ## Decision Log
 
-1. Agents should have access to their assigned MCP servers and discover available tools. The LLM should decide whether to call tools.
+1. Agents should have access to their assigned MCP servers and discover available tools. Supported demo workflows use explicit runtime routing, with room to add model-driven tool choice later.
 2. Write actions should mutate PostgreSQL, but the agent flow should pause and wait for human approval before executing them.
 3. A2A should use JSON-RPC streaming for agent-to-agent communication.
 4. Every long-running service should expose health and readiness endpoints for Docker Compose.
-5. OpenAI should be the LLM provider. The API key and model should come from the environment.
-6. Use the OpenAI Python SDK and OpenAI Agents SDK as much as practical.
+5. OpenAI backs the existing agents, while Ollama backs Release Scout. API keys, model names, and service URLs should come from the environment or KAOS model APIs.
+6. Use the OpenAI Python SDK for existing-agent final answer polishing and Ollama's native `/api/chat` endpoint for Release Scout. Keep the OpenAI Agents SDK dependency available, but the custom Python runtime is the current primary runtime.
 7. Use ChatKit custom server integration for the frontend.
 8. Build the frontend as a separate dockerized component.
 9. Use `*_HOST_PORT` variables for Docker host port overrides while keeping internal service ports stable.

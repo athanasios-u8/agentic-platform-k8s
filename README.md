@@ -2,11 +2,13 @@
 
 This repository implements a demo multi-agent bookstore assistant:
 
-- Five independently callable agents
-- Three FastMCP servers
+- Six independently callable agents
+- Four FastMCP servers
 - PostgreSQL demo data
 - Human approval before write actions
 - A2A-style streaming endpoints for agent calls
+- OpenAI-backed bookstore agents plus an Ollama-backed Release Scout agent
+- Tavily-backed internet search for upcoming book releases
 - ChatKit-oriented frontend gateway and dockerized browser frontend
 
 See the scenario and implementation plan:
@@ -26,6 +28,11 @@ docker compose up -d postgres
 docker compose run --rm bookstore-cli python -m scripts.reset_demo_data
 docker compose up
 ```
+
+The default Compose stack starts the OpenAI-backed bookstore agents, MCP
+servers, database, gateway, and frontend. Release Scout, Ollama, and the
+upcoming releases MCP server are in the optional `local-llm` profile described
+below.
 
 If your machine already has Postgres on `5432`, set another host port in `.env`,
 for example `POSTGRES_PORT=15432`. The containers still talk to Postgres on
@@ -122,6 +129,60 @@ service keeps its internal container port. For example,
 `CATALOG_MCP_HOST_PORT=18101` publishes the Catalog MCP server on host port
 `18101` while other containers still reach it at `catalog-mcp:8101`.
 
+## Architecture
+
+```mermaid
+flowchart LR
+  UI["frontend\nstatic browser UI"]
+  GW["frontend-gateway\n/chat, /chatkit, approvals"]
+
+  CC["customer-concierge-agent\nOpenAI"]
+  SM["store-manager-agent\nOpenAI"]
+  CS["catalog-specialist-agent\nOpenAI"]
+  RS["reservation-specialist-agent\nOpenAI"]
+  MD["message-drafter-agent\nOpenAI"]
+  Scout["release-scout-agent\nOllama llama3.2:3b"]
+
+  Catalog["catalog-mcp"]
+  Customer["customer-mcp"]
+  StoreOps["store-operations-mcp"]
+  Upcoming["upcoming-releases-mcp\nTavily"]
+  DB[("PostgreSQL")]
+  Tavily["Tavily Search API"]
+  Ollama["Ollama /api/chat"]
+
+  UI --> GW
+  GW --> CC
+  GW --> SM
+  GW --> CS
+  GW --> RS
+  GW --> MD
+  GW --> Scout
+
+  CC --> CS
+  CC --> RS
+  CC --> MD
+  SM --> CS
+  SM --> RS
+  SM --> MD
+
+  CC --> Catalog
+  CC --> Customer
+  CC --> StoreOps
+  SM --> Catalog
+  SM --> StoreOps
+  CS --> Catalog
+  RS --> Customer
+  RS --> StoreOps
+  Scout --> Upcoming
+  Scout --> Ollama
+
+  Catalog --> DB
+  Customer --> DB
+  StoreOps --> DB
+  Upcoming --> Tavily
+```
+
 ## Container Images
 
 The backend services use one reusable Python Dockerfile. Each agent and MCP
@@ -145,27 +206,53 @@ frontend images for local full-stack runs.
 
 ## Kubernetes
 
-Kubernetes manifests live in `k8s/base`. Each deployable unit has its own
-folder, for example `k8s/base/catalog-mcp/service.yaml` and
-`k8s/base/catalog-mcp/deployment.yaml`. The base defines Deployments and
-ClusterIP Services for the three MCP servers, five agents, and frontend gateway,
-plus a demo Postgres deployment and a one-shot data reset Job.
+The current full Kubernetes deployment lives in `k8s/kaos`. It uses KAOS custom
+resources for `ModelAPI`, `MCPServer`, and `Agent` workloads, including:
 
-For a local cluster that can see the `bookstore/*:local` images:
+- `ModelAPI/openai` for the existing OpenAI-backed agents
+- `ModelAPI/llama3-2-3b` for the hosted Ollama `llama3.2:3b` runtime
+- `MCPServer/upcoming-releases` for Tavily-backed internet search
+- `Agent/release-scout` for upcoming book-release scouting
+
+Build all images, including the frontend image that contains the Release Scout
+selector and starter prompt:
 
 ```bash
-make docker-build-backend-images
-kubectl apply -k k8s/base
-kubectl -n bookstore get pods
-kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
+make docker-build-all-images
 ```
 
-Before using a shared cluster, update `k8s/base/secrets.yaml` with real secret
-values and point each service folder's `deployment.yaml` at pushed image tags.
+`k8s/kaos/secrets.yaml` intentionally contains placeholders. For a local KAOS
+cluster, put `OPENAI_API_KEY` and `TAVILY_API_KEY` in `.LOCAL_KEYS`, then apply
+the real secret with:
+
+```bash
+bash deploy-secret.sh
+```
+
+Apply the rest of the KAOS stack without overwriting the real secret:
+
+```bash
+kubectl kustomize k8s/kaos \
+  | yq 'select(.kind != "Secret" or .metadata.name != "bookstore-secrets")' \
+  | kubectl apply -f -
+```
+
+Useful checks:
+
+```bash
+kubectl -n bookstore get modelapi,mcpserver,agent
+kubectl -n bookstore get pods,svc
+kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
+kubectl -n bookstore port-forward svc/frontend 3000:80
+```
+
+The older `k8s/base` manifests remain as plain Kubernetes Deployment/Service
+manifests for the core OpenAI-backed stack. They do not include Release Scout,
+the Tavily MCP server, or the KAOS-hosted Ollama model.
 
 ## Browser UI
 
-The frontend lets you select any of the five agents and send messages through
+The frontend lets you select any of the six agents and send messages through
 the `frontend-gateway`. The active run timeline appears inline below each user
 message, so longer conversations scroll inside the conversation pane instead of
 creating a second page-level timeline. Changing the selected agent clears the

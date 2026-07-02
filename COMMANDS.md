@@ -35,9 +35,12 @@ docker compose build
 docker compose up
 docker compose logs -f catalog-mcp
 docker compose logs -f customer-concierge-agent
+docker compose logs -f release-scout-agent
 docker compose logs -f frontend-gateway
 docker compose logs -f frontend
 ```
+
+`release-scout-agent` runs only when the `local-llm` profile is active.
 
 ## Local Llama 3.2 3B With Ollama
 
@@ -95,6 +98,12 @@ Build all backend images, including the generic job image and gateway:
 make docker-build-backend-images
 ```
 
+Build all backend images plus the browser frontend image:
+
+```bash
+make docker-build-all-images
+```
+
 Tag images for a registry:
 
 ```bash
@@ -103,15 +112,30 @@ make docker-build-backend-images BACKEND_IMAGE_PREFIX=ghcr.io/your-org/bookstore
 
 ## Kubernetes
 
+Use the KAOS deployment for the current full stack, including Release Scout,
+Tavily search, and hosted Ollama:
+
 ```bash
-kubectl apply -k k8s/base
-kubectl -n bookstore get pods
+bash deploy-secret.sh
+kubectl kustomize k8s/kaos \
+  | yq 'select(.kind != "Secret" or .metadata.name != "bookstore-secrets")' \
+  | kubectl apply -f -
+kubectl -n bookstore get modelapi,mcpserver,agent
+kubectl -n bookstore get pods,svc
 kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
+kubectl -n bookstore port-forward svc/frontend 3000:80
 ```
 
-For non-local clusters, push the images from `make docker-build-backend-images`
-and update the image references in each service folder's `deployment.yaml` and
-in `k8s/base/reset-demo-data/job.yaml`.
+`deploy-secret.sh` reads `OPENAI_API_KEY` and `TAVILY_API_KEY` from the
+environment or `.LOCAL_KEYS`. The filtered apply avoids replacing that real
+secret with the placeholders in `k8s/kaos/secrets.yaml`.
+
+For non-local clusters, push the images from `make docker-build-all-images` and
+update the image references in each `k8s/kaos/*` component folder.
+
+The older `k8s/base` manifests are plain Kubernetes manifests for the core
+OpenAI-backed stack. They do not include the Release Scout agent, Tavily MCP
+server, or KAOS-hosted Ollama model.
 
 ## Local Services Without Docker
 
@@ -119,11 +143,13 @@ in `k8s/base/reset-demo-data/job.yaml`.
 uv run python -m bookstore_agents.mcp_servers.catalog.server
 uv run python -m bookstore_agents.mcp_servers.customer.server
 uv run python -m bookstore_agents.mcp_servers.store_operations.server
+uv run python -m bookstore_agents.mcp_servers.upcoming_releases.server
 uv run python -m bookstore_agents.agents.customer_concierge.server
 uv run python -m bookstore_agents.agents.store_manager.server
 uv run python -m bookstore_agents.agents.catalog_specialist.server
 uv run python -m bookstore_agents.agents.reservation_specialist.server
 uv run python -m bookstore_agents.agents.message_drafter.server
+uv run python -m bookstore_agents.agents.release_scout.server
 uv run python -m bookstore_agents.frontend_gateway.server
 ```
 
@@ -151,6 +177,14 @@ Call through the frontend gateway, using the same path as the browser UI:
 curl -N http://localhost:8300/chat \
   -H 'Content-Type: application/json' \
   -d '{"agent":"store_manager","message":"Theo Martin called and is not going to pick up Signal from Glass Moon. Can we update the system accordingly?"}'
+```
+
+Call Release Scout through the frontend gateway:
+
+```bash
+curl -N http://localhost:8300/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"agent":"release_scout","message":"Find upcoming cozy fantasy releases."}'
 ```
 
 List pending approvals:

@@ -1,7 +1,7 @@
 [project]
 name = "bookstore-agents"
 version = "0.1.0"
-description = "Local Bookstore Assistant with FastMCP servers, A2A-style agents, OpenAI Agents SDK, ChatKit frontend, and PostgreSQL demo data."
+description = "Local Bookstore Assistant with FastMCP servers, A2A-style agents, OpenAI and Ollama runtimes, ChatKit-oriented frontend, and PostgreSQL demo data."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

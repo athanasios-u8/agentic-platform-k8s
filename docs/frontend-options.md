@@ -2,9 +2,9 @@
 
 ## Context
 
-The Local Bookstore Assistant needs a frontend for interacting with five independently callable agents. The frontend should support streaming responses, visible tool and subagent activity, and human approval before write actions mutate PostgreSQL.
+The Local Bookstore Assistant needs a frontend for interacting with six independently callable agents. The frontend should support streaming responses, visible tool and subagent activity, and human approval before write actions mutate PostgreSQL.
 
-As of June 16, 2026, the recommended OpenAI-native path is to use the OpenAI Agents SDK for the backend agent runtime and ChatKit with a custom server for the frontend experience.
+As of July 2, 2026, the implemented path is a lightweight browser UI backed by a custom Python gateway. The gateway exposes a `/chat` NDJSON stream for the current UI and a `/chatkit` SSE adapter for ChatKit-style integrations.
 
 ## Recommendation
 
@@ -14,8 +14,10 @@ Decision: selected for implementation.
 
 This means:
 
-- Backend agents use the OpenAI Agents SDK.
-- Agents remain independently callable over A2A.
+- Backend agents expose A2A-style endpoints and an OpenAI-compatible `/v1/chat/completions` surface.
+- Existing bookstore agents use the OpenAI Responses API for final answer polishing when configured.
+- Release Scout uses Ollama `llama3.2:3b` for final answer polishing and Tavily-backed MCP search for internet access.
+- Agents remain independently callable.
 - The frontend gateway routes user messages to the selected A2A agent.
 - The current browser UI consumes the gateway's `/chat` NDJSON stream.
 - The gateway also exposes `/chatkit` as an SSE adapter for ChatKit-style integrations.
@@ -46,7 +48,7 @@ AgentKit can be useful as an umbrella for OpenAI agent-building capabilities, es
 
 For this project:
 
-- Use the OpenAI Agents SDK for agent logic, model calls, tool choice, streaming, and approvals.
+- Keep the current custom runtime as the implementation source of truth: A2A-style agent services, FastMCP tool calls, deterministic fallbacks, and explicit approval state.
 - Use the ChatKit-oriented custom server integration path for the frontend gateway.
 - Avoid Agent Builder-hosted workflows for new implementation work. OpenAI documentation says Agent Builder is in a transition window and is scheduled to shut down on November 30, 2026.
 
@@ -63,7 +65,7 @@ Best when:
 
 Pros:
 
-- Works with OpenAI Agents SDK backends.
+- Works with the current Python agent services and can also support OpenAI Agents SDK-backed services later.
 - Supports streaming from a custom server.
 - Supports widgets, forms, actions, and progress events.
 - Good fit for approval cards.
@@ -92,7 +94,7 @@ Pros:
 Cons:
 
 - More frontend work.
-- More adapter code between OpenAI Agents SDK events, A2A events, and AG-UI events.
+- More adapter code between A2A events, MCP events, and AG-UI events.
 - Approval UI must be designed and implemented by us.
 
 ## Option C: Simple FastAPI Streaming UI
@@ -143,6 +145,11 @@ Status: accepted.
 Implementation status: the repository currently ships a static frontend that uses
 the gateway's `/chat` stream directly, plus a `/chatkit` SSE adapter that keeps
 the gateway aligned with the selected ChatKit direction.
+
+The current UI agent selector includes Customer Concierge, Store Manager,
+Catalog Specialist, Reservation Specialist, Message Drafter, and Release Scout.
+Release Scout is intentionally isolated from the existing OpenAI-backed agents:
+it calls the upcoming releases MCP server and uses Ollama for its final answer.
 
 Keep the event adapter modular so AG-UI can be added later if we decide the demo needs a more explicit protocol-level visualization of A2A and MCP activity.
 

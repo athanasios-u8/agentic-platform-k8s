@@ -74,8 +74,26 @@ checked-in secret keeps the key empty by design. `MCPServer/upcoming-releases`
 also requires `TAVILY_API_KEY`; set it in `bookstore-secrets` before expecting
 live internet search results.
 
+For local deployments, create `.LOCAL_KEYS` in the repository root:
+
 ```bash
-kubectl apply -k k8s/kaos
+export OPENAI_API_KEY=...
+export TAVILY_API_KEY=...
+```
+
+Then create or update the real Kubernetes secret:
+
+```bash
+bash deploy-secret.sh
+```
+
+When applying the full KAOS kustomization, skip `secrets.yaml` so the
+placeholder values do not overwrite the real secret:
+
+```bash
+kubectl kustomize k8s/kaos \
+  | yq 'select(.kind != "Secret" or .metadata.name != "bookstore-secrets")' \
+  | kubectl apply -f -
 ```
 
 Useful checks:
@@ -101,6 +119,11 @@ KAOS will create workload services named:
 - `agent-store-manager`
 - `frontend-gateway`
 - `frontend`
+
+The KAOS `Agent` and `MCPServer` resources set `podSpec.enableServiceLinks:
+false`. This prevents Kubernetes service-link environment variables such as
+`FRONTEND_GATEWAY_PORT=tcp://...` from overriding integer application settings
+inside the Python containers.
 
 For local browser testing, port-forward both browser-facing services:
 
