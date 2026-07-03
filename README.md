@@ -11,11 +11,11 @@ This repository implements a demo multi-agent bookstore assistant:
 - Tavily-backed internet search for upcoming book releases
 - ChatKit-oriented frontend gateway and dockerized browser frontend
 
-See the scenario and implementation plan:
+Useful supporting docs:
 
 - `docs/bookstore-agent-scenario.md`
-- `docs/codex-implementation-plan.md`
-- `docs/frontend-options.md`
+- `frontend/README.md`
+- `COMMANDS.md`
 
 ## Quick Start
 
@@ -30,7 +30,8 @@ docker compose up
 ```
 
 The default Compose stack starts the OpenAI-backed bookstore agents, MCP
-servers, database, gateway, and frontend. Release Scout, Ollama, and the
+servers, database, gateway, frontend, and local trace observability with the
+OpenTelemetry Collector, Tempo, and Grafana. Release Scout, Ollama, and the
 upcoming releases MCP server are in the optional `local-llm` profile described
 below.
 
@@ -123,6 +124,9 @@ Ollama stores downloaded models in the `ollama` named volume. If host port
 | `release-scout-agent` | 8206 | Ollama-backed upcoming release subagent |
 | `frontend-gateway` | 8300 | ChatKit gateway and approval routes |
 | `frontend` | 3000 | Browser UI |
+| `tempo` | 3200 | Local trace store queried by Grafana |
+| `grafana` | 3001 | Local trace UI with a pre-provisioned Tempo datasource |
+| `otel-collector` | 14318 / 14317 | Local OTLP HTTP / gRPC intake for traces |
 
 The host port can be changed with the matching `*_HOST_PORT` variable while the
 service keeps its internal container port. For example,
@@ -250,6 +254,25 @@ For clusters without KAOS CRDs, `k8s/base` provides plain Kubernetes
 Deployment/Service manifests. It keeps OpenAI external through
 `OPENAI_API_KEY`, and includes an in-cluster Ollama runtime, model-pull Job,
 Upcoming Releases MCP server, and Release Scout agent.
+
+## Observability
+
+Observability is enabled by default and is OTel-first:
+
+```env
+OBSERVABILITY_ENABLED=true
+OBSERVABILITY_CAPTURE_CONTENT=true
+OBSERVABILITY_CONTENT_MAX_CHARS=6000
+OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4318/v1/traces
+OTEL_RESOURCE_ATTRIBUTES=deployment.environment=demo,service.namespace=bookstore-agents
+```
+
+The default Docker Compose collector exports traces to Tempo, and Grafana is
+available at `http://localhost:3001`. Add `docker-compose.langfuse.yml` to run
+the fully local OSS Langfuse path; the collector then fans out traces to both
+Tempo and Langfuse. See `COMMANDS.md#observability` for the grouped local
+startup commands, health checks, smoke trace commands, URLs, and Kubernetes
+observability commands.
 
 ## Browser UI
 

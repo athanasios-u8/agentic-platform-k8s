@@ -38,9 +38,12 @@ docker compose logs -f customer-concierge-agent
 docker compose logs -f release-scout-agent
 docker compose logs -f frontend-gateway
 docker compose logs -f frontend
+docker compose logs -f otel-collector
 ```
 
-`release-scout-agent` runs only when the `local-llm` profile is active.
+`release-scout-agent` runs only when the `local-llm` profile is active. The
+default Compose stack also starts local trace observability: Collector, Tempo,
+and Grafana.
 
 ## Local Llama 3.2 3B With Ollama
 
@@ -141,6 +144,134 @@ Release Scout as regular Kubernetes resources:
 kubectl apply -k k8s/base
 kubectl -n bookstore get deploy,svc,pvc,job
 kubectl -n bookstore logs job/ollama-pull-llama3-2-3b
+```
+
+## Observability
+
+Observability is enabled by default. Services emit OpenTelemetry traces to the
+local Collector. The default Compose stack sends traces to Tempo; the Langfuse
+override fans out to both Tempo and local OSS Langfuse.
+
+### Local Startup
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm up --build -d
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile cli run --rm bookstore-cli python -m scripts.reset_demo_data
+```
+
+This starts the bookstore app, the `local-llm` profile, Tempo, Grafana, the
+OpenTelemetry Collector, local Langfuse Web/Worker, Langfuse Postgres,
+ClickHouse, Redis, and MinIO. It does not use Langfuse Cloud.
+
+### Local URLs
+
+| Surface | URL |
+|---|---|
+| Browser frontend | `http://localhost:3000` |
+| Frontend gateway health | `http://localhost:8300/healthz` |
+| Frontend gateway agents | `http://localhost:8300/agents` |
+| Grafana | `http://localhost:3001` |
+| Langfuse | `http://localhost:3002` |
+| Tempo readiness | `http://localhost:3200/ready` |
+| OTel Collector HTTP | `http://localhost:14318/v1/traces` |
+| OTel Collector gRPC | `localhost:14317` |
+| MinIO console | `http://localhost:9091` |
+| Ollama | `http://localhost:11434` |
+
+Langfuse is seeded from `.env` by default:
+
+```text
+demo@bookstore.local
+bookstore-demo
+```
+
+### Health Checks
+
+```bash
+curl -fsS http://127.0.0.1:8300/healthz
+curl -fsS http://127.0.0.1:8300/agents
+curl -fsS http://127.0.0.1:3001/api/health
+curl -fsS http://127.0.0.1:3200/ready
+curl -fsSI http://127.0.0.1:3002
+```
+
+### Smoke Trace
+
+```bash
+curl -N --max-time 120 http://127.0.0.1:8300/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"agent":"catalog_specialist","message":"Recommend one mystery book under $20. Keep the answer brief.","context":{"session_id":"local-observability-smoke"}}'
+```
+
+Search Tempo for the named workflow span:
+
+```bash
+curl -fsS --get http://127.0.0.1:3200/api/search \
+  --data-urlencode 'q={name="frontend.chat"}' \
+  --data-urlencode limit=50
+```
+
+```bash
+curl -fsS 'http://127.0.0.1:3200/api/traces/<trace-id>'
+```
+
+In a healthy smoke run, Tempo shows one `POST /chat` trace spanning
+`frontend-gateway`, `catalog-specialist-agent`, and `catalog-mcp`. Langfuse
+shows the same workflow with prompt, output, tool, and generation observations.
+
+### Logs And Storage Checks
+
+```bash
+docker compose logs -f otel-collector
+docker compose logs -f tempo
+docker compose logs -f grafana
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml logs -f langfuse-web
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml logs -f langfuse-worker
+```
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm exec -T langfuse-clickhouse sh -lc 'clickhouse-client --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --query "SELECT count() FROM traces"'
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm exec -T langfuse-clickhouse sh -lc 'clickhouse-client --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --query "SELECT count() FROM observations"'
+```
+
+### Stop
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm down
+```
+
+### Kubernetes
+
+```bash
+helm repo add langfuse https://langfuse.github.io/langfuse-k8s
+helm upgrade --install langfuse langfuse/langfuse \
+  --namespace bookstore \
+  --create-namespace \
+  -f k8s/observability/langfuse-values.yaml
+
+kubectl apply -k k8s/observability
+```
+
+After Langfuse is running, create a Langfuse project and store its public/secret
+key pair for the collector. The secret value is base64 of `public:secret`:
+
+```bash
+LANGFUSE_AUTH_STRING="$(printf 'pk-lf-...:sk-lf-...' | base64 | tr -d '\n')"
+kubectl -n bookstore create secret generic bookstore-observability-secrets \
+  --from-literal=LANGFUSE_AUTH_STRING="${LANGFUSE_AUTH_STRING}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n bookstore rollout restart deploy/otel-collector
+```
+
+```bash
+kubectl apply -k k8s/kaos-observability
+# or:
+kubectl apply -k k8s/base-observability
+```
+
+```bash
+kubectl -n bookstore port-forward svc/grafana 3001:3000
+kubectl -n bookstore port-forward svc/langfuse-web 3002:3000
 ```
 
 ## Local Services Without Docker
