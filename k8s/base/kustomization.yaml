@@ -7,12 +7,15 @@ resources:
   - secrets.yaml
   - postgres
   - reset-demo-data
+  - ollama
   - catalog-mcp
   - customer-mcp
   - store-operations-mcp
+  - upcoming-releases-mcp
   - customer-concierge-agent
   - store-manager-agent
   - catalog-specialist-agent
   - reservation-specialist-agent
   - message-drafter-agent
+  - release-scout-agent
   - frontend-gateway

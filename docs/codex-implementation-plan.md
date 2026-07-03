@@ -650,9 +650,11 @@ Docker requirements:
   and healthy `upcoming-releases-mcp`.
 - Keep `OPENAI_API_KEY` available only to backend services that need model access, not to the browser-facing frontend container.
 - Build deployable agent and MCP images with service-specific image tags such as `bookstore/catalog-mcp:local` and `bookstore/customer-concierge-agent:local`.
-- Keep plain Kubernetes manifests under `k8s/base` for the original core stack.
-  Use `k8s/kaos` for the current full stack with KAOS `ModelAPI`,
-  `MCPServer`, and `Agent` resources.
+- Keep plain Kubernetes manifests under `k8s/base` for clusters without KAOS
+  CRDs. Base keeps OpenAI external and deploys Ollama, Upcoming Releases MCP,
+  and Release Scout as regular Kubernetes resources.
+- Use `k8s/kaos` for the CRD-based stack with KAOS `ModelAPI`, `MCPServer`,
+  and `Agent` resources.
 
 ## Phase 9: Command Documentation
 

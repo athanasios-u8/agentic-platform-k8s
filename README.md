@@ -246,9 +246,10 @@ kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 kubectl -n bookstore port-forward svc/frontend 3000:80
 ```
 
-The older `k8s/base` manifests remain as plain Kubernetes Deployment/Service
-manifests for the core OpenAI-backed stack. They do not include Release Scout,
-the Tavily MCP server, or the KAOS-hosted Ollama model.
+For clusters without KAOS CRDs, `k8s/base` provides plain Kubernetes
+Deployment/Service manifests. It keeps OpenAI external through
+`OPENAI_API_KEY`, and includes an in-cluster Ollama runtime, model-pull Job,
+Upcoming Releases MCP server, and Release Scout agent.
 
 ## Browser UI
 

@@ -133,9 +133,15 @@ secret with the placeholders in `k8s/kaos/secrets.yaml`.
 For non-local clusters, push the images from `make docker-build-all-images` and
 update the image references in each `k8s/kaos/*` component folder.
 
-The older `k8s/base` manifests are plain Kubernetes manifests for the core
-OpenAI-backed stack. They do not include the Release Scout agent, Tavily MCP
-server, or KAOS-hosted Ollama model.
+For plain Kubernetes without KAOS CRDs, use `k8s/base`. It keeps OpenAI
+external, and deploys Ollama, the model-pull Job, Upcoming Releases MCP, and
+Release Scout as regular Kubernetes resources:
+
+```bash
+kubectl apply -k k8s/base
+kubectl -n bookstore get deploy,svc,pvc,job
+kubectl -n bookstore logs job/ollama-pull-llama3-2-3b
+```
 
 ## Local Services Without Docker
 
