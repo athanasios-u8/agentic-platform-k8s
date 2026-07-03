@@ -21,6 +21,11 @@ x-backend-env: &backend-env
   APPROVAL_REQUIRED_FOR_WRITES: ${APPROVAL_REQUIRED_FOR_WRITES:-true}
   APPROVAL_STATE_STORE: ${APPROVAL_STATE_STORE:-postgres}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  OBSERVABILITY_ENABLED: ${OBSERVABILITY_ENABLED:-true}
+  OBSERVABILITY_CAPTURE_CONTENT: ${OBSERVABILITY_CAPTURE_CONTENT:-true}
+  OBSERVABILITY_CONTENT_MAX_CHARS: ${OBSERVABILITY_CONTENT_MAX_CHARS:-6000}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://otel-collector:4318/v1/traces}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment=demo,service.namespace=bookstore-agents}
 
 x-backend-build: &backend-build
   context: .
@@ -337,6 +342,42 @@ services:
     ports:
       - "${FRONTEND_HOST_PORT:-3000}:80"
 
+  tempo:
+    image: grafana/tempo:2.8.1
+    user: "0:0"
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    ports:
+      - "${TEMPO_HOST_PORT:-3200}:3200"
+    volumes:
+      - ./docker/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/tmp/tempo
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    depends_on:
+      - tempo
+    ports:
+      - "${GRAFANA_HOST_PORT:-3001}:3000"
+    volumes:
+      - ./docker/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.123.0
+    command: ["--config=/etc/otelcol/otel-collector.yaml"]
+    depends_on:
+      - tempo
+    ports:
+      - "${OTEL_COLLECTOR_GRPC_HOST_PORT:-14317}:4317"
+      - "${OTEL_COLLECTOR_HTTP_HOST_PORT:-14318}:4318"
+    volumes:
+      - ./docker:/etc/otelcol:ro
+
 volumes:
   bookstore-postgres:
   ollama:
+  tempo-data:

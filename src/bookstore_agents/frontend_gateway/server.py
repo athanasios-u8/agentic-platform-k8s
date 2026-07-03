@@ -10,6 +10,12 @@ from pydantic import BaseModel, Field
 
 from bookstore_agents.agents.common.a2a_client import A2AClient
 from bookstore_agents.common.config import get_port, get_settings
+from bookstore_agents.common.observability import (
+    instrument_fastapi_app,
+    set_span_output,
+    start_span,
+    workflow_attributes,
+)
 from bookstore_agents.frontend_gateway import approvals
 from bookstore_agents.frontend_gateway.chatkit_server import (
     extract_agent_key,
@@ -38,6 +44,7 @@ def agent_urls() -> dict[str, str]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Bookstore Frontend Gateway")
+    instrument_fastapi_app(app, "frontend-gateway")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -66,10 +73,26 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Unknown agent {payload.agent}.")
 
         async def stream() -> AsyncIterator[str]:
-            async for event in client.stream_message(
-                urls[payload.agent], payload.message, payload.context
-            ):
-                yield json.dumps(event, default=str) + "\n"
+            attributes = workflow_attributes(
+                agent=payload.agent,
+                event="frontend.chat",
+                input_value=payload.message,
+                session_id=payload.context.get("session_id"),
+                extra={"bookstore.gateway.route": "/chat"},
+            )
+            with start_span("frontend.chat", attributes) as span:
+                async for event in client.stream_message(
+                    urls[payload.agent], payload.message, payload.context
+                ):
+                    params = event.get("params", {}) if isinstance(event, dict) else {}
+                    payload_event = params.get("event", {}) if isinstance(params, dict) else {}
+                    if payload_event.get("type") == "final":
+                        set_span_output(
+                            span,
+                            payload_event.get("answer") or payload_event,
+                            trace_output=True,
+                        )
+                    yield json.dumps(event, default=str) + "\n"
 
         return StreamingResponse(stream(), media_type="application/x-ndjson")
 
@@ -83,8 +106,23 @@ def create_app() -> FastAPI:
             agent_key = "customer_concierge"
 
         async def events() -> AsyncIterator[dict[str, Any]]:
-            async for event in client.stream_message(urls[agent_key], message, context):
-                yield extract_agent_event(event)
+            attributes = workflow_attributes(
+                agent=agent_key,
+                event="frontend.chatkit",
+                input_value=message,
+                session_id=context.get("session_id"),
+                extra={"bookstore.gateway.route": "/chatkit"},
+            )
+            with start_span("frontend.chatkit", attributes) as span:
+                async for event in client.stream_message(urls[agent_key], message, context):
+                    extracted = extract_agent_event(event)
+                    if extracted.get("type") == "final":
+                        set_span_output(
+                            span,
+                            extracted.get("answer") or extracted,
+                            trace_output=True,
+                        )
+                    yield extracted
 
         return StreamingResponse(ndjson_to_sse(events()), media_type="text/event-stream")
 

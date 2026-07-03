@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     )
     approval_state_store: str = Field(default="postgres", alias="APPROVAL_STATE_STORE")
 
+    observability_enabled: bool = Field(default=True, alias="OBSERVABILITY_ENABLED")
+    observability_capture_content: bool = Field(
+        default=True,
+        alias="OBSERVABILITY_CAPTURE_CONTENT",
+    )
+    observability_content_max_chars: int = Field(
+        default=6000,
+        alias="OBSERVABILITY_CONTENT_MAX_CHARS",
+    )
+
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
 
 

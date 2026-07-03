@@ -9,6 +9,14 @@ from bookstore_agents.agents.common.mcp_client import MCPClient
 from bookstore_agents.agents.common.ollama_runtime import OllamaTextRuntime
 from bookstore_agents.agents.common.openai_runtime import OpenAITextRuntime
 from bookstore_agents.common.approvals import WRITE_TOOLS, create_approval
+from bookstore_agents.common.observability import (
+    mark_span_error,
+    set_span_attributes,
+    set_span_output,
+    start_span,
+    tool_attributes,
+    workflow_attributes,
+)
 from bookstore_agents.mcp_servers.catalog.repository import CatalogRepository
 from bookstore_agents.mcp_servers.customer.repository import CustomerRepository
 from bookstore_agents.mcp_servers.store_operations.repository import StoreOperationsRepository
@@ -31,10 +39,32 @@ class AgentRuntime:
         self, message: str, context: dict[str, Any] | None = None
     ) -> AsyncIterator[dict[str, Any]]:
         context = context or {}
-        yield {"type": "run_started", "agent": self.spec.name, "message": message}
-        tools = await self.mcp_client.list_tools()
-        yield {"type": "tool_discovery", "agent": self.spec.name, "tools": tools}
+        session_id = context.get("session_id")
+        attributes = workflow_attributes(
+            agent=self.spec.slug,
+            event="agent.run",
+            input_value=message,
+            session_id=str(session_id) if session_id else None,
+            extra={
+                "bookstore.agent.name": self.spec.name,
+                "bookstore.agent.role": self.spec.role,
+            },
+        )
+        with start_span("agent.run", attributes) as span:
+            yield {"type": "run_started", "agent": self.spec.name, "message": message}
+            tools = await self.mcp_client.list_tools()
+            yield {"type": "tool_discovery", "agent": self.spec.name, "tools": tools}
 
+            async for event in self._run_for_spec(message, context):
+                if event.get("type") == "final":
+                    set_span_output(span, event.get("answer") or event, trace_output=True)
+                yield event
+
+    async def _run_for_spec(
+        self,
+        message: str,
+        context: dict[str, Any],
+    ) -> AsyncIterator[dict[str, Any]]:
         if self.spec.slug == "catalog-specialist":
             async for event in self._run_catalog_specialist(message, context):
                 yield event
@@ -63,20 +93,50 @@ class AgentRuntime:
         arguments: dict[str, Any],
         requires_approval: bool = False,
     ) -> dict[str, Any]:
-        if requires_approval or tool_name in WRITE_TOOLS:
-            approval = create_approval(
-                agent_name=self.spec.name,
-                tool_name=tool_name,
-                arguments=arguments,
-                summary=self._approval_summary(tool_name, arguments),
-                run_state={"agent": self.spec.slug, "server": server_name},
-            )
-            return {"approval_required": True, "approval": approval}
-        try:
-            result = await self.mcp_client.call_tool(server_name, tool_name, arguments)
-            return {"result": result}
-        except Exception:
-            return {"result": self._direct_tool_call(tool_name, arguments)}
+        attributes = tool_attributes(
+            server=server_name,
+            tool=tool_name,
+            arguments=arguments,
+            extra={"bookstore.agent": self.spec.slug},
+        )
+        with start_span("tool.call", attributes) as span:
+            if requires_approval or tool_name in WRITE_TOOLS:
+                approval = create_approval(
+                    agent_name=self.spec.name,
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    summary=self._approval_summary(tool_name, arguments),
+                    run_state={"agent": self.spec.slug, "server": server_name},
+                )
+                set_span_attributes(
+                    span,
+                    {
+                        "bookstore.approval.required": True,
+                        "bookstore.approval.id": approval["approval_id"],
+                        "bookstore.approval.summary": approval["summary"],
+                    },
+                )
+                with start_span(
+                    "approval.requested",
+                    {
+                        "bookstore.agent": self.spec.slug,
+                        "bookstore.tool.name": tool_name,
+                        "bookstore.approval.id": approval["approval_id"],
+                        "bookstore.approval.summary": approval["summary"],
+                    },
+                ) as approval_span:
+                    set_span_output(approval_span, approval)
+                return {"approval_required": True, "approval": approval}
+            try:
+                result = await self.mcp_client.call_tool(server_name, tool_name, arguments)
+                set_span_output(span, result)
+                return {"result": result}
+            except Exception as exc:
+                mark_span_error(span, exc)
+                fallback_result = self._direct_tool_call(tool_name, arguments)
+                set_span_attributes(span, {"bookstore.tool.fallback": True})
+                set_span_output(span, fallback_result)
+                return {"result": fallback_result}
 
     def _direct_tool_call(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         if tool_name == "search_books":
@@ -403,21 +463,36 @@ class AgentRuntime:
                 "subagent": subagent_key,
                 "message": "No URL configured.",
             }
-        try:
-            result = await self.a2a_client.final_message(url, message, context)
-            return {
-                "type": "subagent_response_received",
-                "subagent": subagent_key,
-                "answer": result.get("answer"),
-                "data": result.get("data", {}),
-            }
-        except Exception as exc:
-            return {
-                "type": "subagent_response_received",
-                "subagent": subagent_key,
-                "answer": f"Subagent {subagent_key} was unavailable: {exc}",
-                "data": {},
-            }
+        attributes = workflow_attributes(
+            agent=self.spec.slug,
+            event="subagent.call",
+            input_value=message,
+            extra={
+                "bookstore.subagent": subagent_key,
+                "bookstore.subagent.url": url,
+            },
+        )
+        with start_span("subagent.call", attributes) as span:
+            try:
+                result = await self.a2a_client.final_message(url, message, context)
+                response = {
+                    "type": "subagent_response_received",
+                    "subagent": subagent_key,
+                    "answer": result.get("answer"),
+                    "data": result.get("data", {}),
+                }
+                set_span_output(span, response)
+                return response
+            except Exception as exc:
+                mark_span_error(span, exc)
+                response = {
+                    "type": "subagent_response_received",
+                    "subagent": subagent_key,
+                    "answer": f"Subagent {subagent_key} was unavailable: {exc}",
+                    "data": {},
+                }
+                set_span_output(span, response)
+                return response
 
     async def _prepare_reservation_status_change(
         self,

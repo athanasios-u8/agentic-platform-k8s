@@ -1,6 +1,13 @@
 from typing import Any
 
 from bookstore_agents.common.config import get_settings
+from bookstore_agents.common.observability import (
+    generation_attributes,
+    mark_span_error,
+    set_span_attributes,
+    set_span_output,
+    start_span,
+)
 
 try:
     from openai import AsyncOpenAI
@@ -43,11 +50,34 @@ class OpenAITextRuntime:
             f"Structured context: {context}\n\n"
             "Write a concise, useful final answer. Do not invent facts beyond the context."
         )
-        try:
-            response = await self.client.responses.create(
-                model=self.settings.openai_model,
-                input=prompt,
-            )
-            return response.output_text or fallback
-        except Exception:
+        if self.client is None:
             return fallback
+
+        attributes = generation_attributes(
+            provider="openai",
+            model=self.settings.openai_model,
+            input_value=prompt,
+            agent=agent_name,
+            operation="responses",
+        )
+        with start_span("llm.openai.responses", attributes) as span:
+            try:
+                response = await self.client.responses.create(
+                    model=self.settings.openai_model,
+                    input=prompt,
+                )
+                output = response.output_text or fallback
+                set_span_attributes(
+                    span,
+                    {
+                        "gen_ai.response.model": getattr(response, "model", None)
+                        or self.settings.openai_model,
+                    },
+                )
+                set_span_output(span, output)
+                return output
+            except Exception as exc:
+                mark_span_error(span, exc)
+                set_span_attributes(span, {"bookstore.llm.fallback": True})
+                set_span_output(span, fallback)
+                return fallback

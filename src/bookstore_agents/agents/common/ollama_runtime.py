@@ -3,6 +3,13 @@ from typing import Any
 import httpx
 
 from bookstore_agents.common.config import get_settings
+from bookstore_agents.common.observability import (
+    generation_attributes,
+    mark_span_error,
+    set_span_attributes,
+    set_span_output,
+    start_span,
+)
 
 
 class OllamaTextRuntime:
@@ -34,12 +41,27 @@ class OllamaTextRuntime:
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
         }
-        try:
-            async with httpx.AsyncClient(timeout=60) as client:
-                response = await client.post(self._chat_url(), json=payload)
-                response.raise_for_status()
-            data = response.json()
-            content = data.get("message", {}).get("content")
-            return content or fallback
-        except Exception:
-            return fallback
+        attributes = generation_attributes(
+            provider="ollama",
+            model=self.settings.ollama_model,
+            input_value=payload,
+            agent=agent_name,
+        )
+        with start_span("llm.ollama.chat", attributes) as span:
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    response = await client.post(self._chat_url(), json=payload)
+                    response.raise_for_status()
+                data = response.json()
+                content = data.get("message", {}).get("content") or fallback
+                set_span_attributes(
+                    span,
+                    {"gen_ai.response.model": data.get("model") or self.settings.ollama_model},
+                )
+                set_span_output(span, content)
+                return content
+            except Exception as exc:
+                mark_span_error(span, exc)
+                set_span_attributes(span, {"bookstore.llm.fallback": True})
+                set_span_output(span, fallback)
+                return fallback

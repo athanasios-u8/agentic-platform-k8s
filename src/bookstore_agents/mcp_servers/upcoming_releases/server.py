@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastmcp import FastMCP
 
 from bookstore_agents.common.config import get_port
+from bookstore_agents.common.observability import instrument_fastapi_app
 from bookstore_agents.mcp_servers.upcoming_releases.tools import register_tools
 
 
@@ -12,6 +13,7 @@ def create_app() -> FastAPI:
     mcp_app = mcp.http_app(path="/")
 
     app = FastAPI(title="Upcoming Releases MCP", lifespan=mcp_app.lifespan)
+    instrument_fastapi_app(app, "upcoming-releases-mcp")
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:

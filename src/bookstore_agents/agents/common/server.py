@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from bookstore_agents.agents.common.agent_cards import AgentSpec
 from bookstore_agents.agents.common.runtime import AgentRuntime
 from bookstore_agents.agents.common.streaming import encode_event, json_rpc_event
+from bookstore_agents.common.observability import instrument_fastapi_app
 
 
 class AgentMessageRequest(BaseModel):
@@ -76,6 +77,7 @@ def _chat_completion_chunk(
 def create_agent_app(spec: AgentSpec) -> FastAPI:
     runtime = AgentRuntime(spec)
     app = FastAPI(title=spec.name)
+    instrument_fastapi_app(app, f"{spec.slug}-agent")
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
