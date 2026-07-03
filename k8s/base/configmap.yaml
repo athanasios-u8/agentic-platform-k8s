@@ -34,3 +34,8 @@ data:
   APPROVAL_REQUIRED_FOR_WRITES: "true"
   APPROVAL_STATE_STORE: postgres
   LOG_LEVEL: INFO
+  OBSERVABILITY_ENABLED: "true"
+  OBSERVABILITY_CAPTURE_CONTENT: "true"
+  OBSERVABILITY_CONTENT_MAX_CHARS: "6000"
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4318/v1/traces
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment=demo,service.namespace=bookstore-agents

@@ -1,0 +1,32 @@
+langfuse:
+  salt:
+    value: "replace-me-with-openssl-rand-base64-32"
+  nextauth:
+    secret:
+      value: "replace-me-with-openssl-rand-base64-32"
+  web:
+    service:
+      type: ClusterIP
+      port: 3000
+  worker:
+    replicas: 1
+
+postgresql:
+  auth:
+    username: langfuse
+    database: langfuse
+    password: "replace-me-with-openssl-rand-base64-32"
+
+clickhouse:
+  auth:
+    username: default
+    password: "replace-me-with-openssl-rand-base64-32"
+
+redis:
+  auth:
+    password: "replace-me-with-openssl-rand-base64-32"
+
+s3:
+  auth:
+    rootUser: langfuse
+    rootPassword: "replace-me-with-openssl-rand-base64-32"
