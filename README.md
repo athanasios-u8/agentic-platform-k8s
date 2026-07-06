@@ -270,9 +270,12 @@ OTEL_RESOURCE_ATTRIBUTES=deployment.environment=demo,service.namespace=bookstore
 The default Docker Compose collector exports traces to Tempo, and Grafana is
 available at `http://localhost:3001`. Add `docker-compose.langfuse.yml` to run
 the fully local OSS Langfuse path; the collector then fans out traces to both
-Tempo and Langfuse. See `COMMANDS.md#observability` for the grouped local
-startup commands, health checks, smoke trace commands, URLs, and Kubernetes
-observability commands.
+Tempo and Langfuse. In Kubernetes, the observability stack runs in the
+`monitoring` namespace and the app exports traces to
+`otel-collector.monitoring.svc.cluster.local`. See `COMMANDS.md#observability`
+for the grouped local startup commands, health checks, smoke trace commands,
+URLs, and the full Kubernetes apply order, including the Langfuse auth secret
+step after applying the observability overlay.
 
 ## Browser UI
 

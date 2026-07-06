@@ -242,36 +242,65 @@ docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile lo
 
 ### Kubernetes
 
+Observability runs in the `monitoring` namespace. The bookstore app remains in
+`bookstore`, but `bookstore-config` points app traces to
+`http://otel-collector.monitoring.svc.cluster.local:4318/v1/traces`.
+
+Use this full order for the KAOS deployment:
+
 ```bash
 helm repo add langfuse https://langfuse.github.io/langfuse-k8s
+helm repo update
+
 helm upgrade --install langfuse langfuse/langfuse \
-  --namespace bookstore \
+  --namespace monitoring \
   --create-namespace \
   -f k8s/observability/langfuse-values.yaml
 
-kubectl apply -k k8s/observability
+kubectl apply -k k8s/kaos-observability
+
+export LANGFUSE_AUTH_STRING="$(grep '^LANGFUSE_AUTH_STRING=' .env | cut -d= -f2-)"
+
+kubectl -n monitoring create secret generic bookstore-observability-secrets \
+  --from-literal=LANGFUSE_AUTH_STRING="${LANGFUSE_AUTH_STRING}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+kubectl -n monitoring rollout restart deploy/otel-collector
 ```
 
-After Langfuse is running, create a Langfuse project and store its public/secret
-key pair for the collector. The secret value is base64 of `public:secret`:
+The order matters:
+
+- The Helm command installs self-hosted Langfuse in `monitoring`.
+- The overlay applies the bookstore app, Tempo, Grafana, Collector, and the
+  cross-namespace OTLP endpoint.
+- The overlay also applies `k8s/observability/secrets.yaml`, which is only a
+  placeholder with an empty `LANGFUSE_AUTH_STRING`.
+- Reapplying the secret after the overlay restores the real Langfuse auth value.
+- The Collector reads `LANGFUSE_AUTH_STRING` as an environment variable, so it
+  needs a rollout restart after the secret changes.
+
+If `.env` does not already contain `LANGFUSE_AUTH_STRING`, create it from the
+Langfuse project public and secret keys:
 
 ```bash
 LANGFUSE_AUTH_STRING="$(printf 'pk-lf-...:sk-lf-...' | base64 | tr -d '\n')"
-kubectl -n bookstore create secret generic bookstore-observability-secrets \
-  --from-literal=LANGFUSE_AUTH_STRING="${LANGFUSE_AUTH_STRING}" \
-  --dry-run=client -o yaml | kubectl apply -f -
-kubectl -n bookstore rollout restart deploy/otel-collector
 ```
 
+For plain Kubernetes without KAOS CRDs, replace the overlay command with:
+
 ```bash
-kubectl apply -k k8s/kaos-observability
-# or:
 kubectl apply -k k8s/base-observability
 ```
 
+If you only want the monitoring stack without applying any app resources, use:
+
 ```bash
-kubectl -n bookstore port-forward svc/grafana 3001:3000
-kubectl -n bookstore port-forward svc/langfuse-web 3002:3000
+kubectl apply -k k8s/observability
+```
+
+```bash
+kubectl -n monitoring port-forward svc/grafana 3001:3000
+kubectl -n monitoring port-forward svc/langfuse-web 3002:3000
 ```
 
 ## Local Services Without Docker
