@@ -2,13 +2,14 @@
 
 This repository implements a demo multi-agent bookstore assistant:
 
-- Six independently callable agents
+- Seven independently callable agents
 - Four FastMCP servers
 - PostgreSQL demo data
 - Human approval before write actions
 - A2A-style streaming endpoints for agent calls
 - OpenAI-backed bookstore agents plus an Ollama-backed Release Scout agent
 - Tavily-backed internet search for upcoming book releases
+- Azure AI Search-backed review retrieval for book review summaries
 - ChatKit-oriented frontend gateway and dockerized browser frontend
 
 Useful supporting docs:
@@ -110,6 +111,31 @@ CPU inference can be slow on first prompt/model load; `OLLAMA_TIMEOUT_SECONDS`
 and `A2A_STREAM_TIMEOUT_SECONDS` keep Release Scout from surfacing that delay as
 a network failure.
 
+## Azure AI Search Book Reviews
+
+Review Summarizer uses synthetic reviews generated from the Postgres catalog,
+stored locally as JSONL, and uploaded unchunked to Azure AI Search. Configure
+the search service in `.env`:
+
+```env
+AZURE_AI_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
+AZURE_AI_SEARCH_INDEX_NAME=srch-index-bookstore-dev
+AZURE_AI_SEARCH_ADMIN_KEY=...
+AZURE_AI_SEARCH_QUERY_KEY=
+BOOK_REVIEW_SEARCH_TOP_K=15
+```
+
+Generate and upload the review corpus after Postgres has been seeded:
+
+```bash
+docker compose run --rm bookstore-cli bookstore-ai-search rebuild
+```
+
+The generated JSONL file defaults to `data/book_reviews/book_reviews.jsonl` and
+is ignored by Git. Open the frontend and choose `Review Summarizer`, or ask
+Customer Concierge a review question such as "What do people like and dislike
+about The Lantern Cipher?"
+
 ## Services
 
 | Service | Default host port | Purpose |
@@ -125,6 +151,7 @@ a network failure.
 | `reservation-specialist-agent` | 8204 | Reservation subagent |
 | `message-drafter-agent` | 8205 | No-tool drafting subagent |
 | `release-scout-agent` | 8206 | Ollama-backed upcoming release subagent |
+| `review-summarizer-agent` | 8207 | Azure AI Search-backed review summarization subagent |
 | `frontend-gateway` | 8300 | ChatKit gateway and approval routes |
 | `frontend` | 3000 | Browser UI |
 | `tempo` | 3200 | Full-stack trace store queried by Grafana |
@@ -163,6 +190,7 @@ flowchart LR
   RS["reservation-specialist-agent\nOpenAI"]
   MD["message-drafter-agent\nOpenAI"]
   Scout["release-scout-agent\nOllama llama3.2:3b"]
+  Reviews["review-summarizer-agent\nOpenAI + Azure AI Search"]
 
   Catalog["catalog-mcp"]
   Customer["customer-mcp"]
@@ -171,6 +199,7 @@ flowchart LR
   DB[("PostgreSQL")]
   Tavily["Tavily Search API"]
   Ollama["Ollama /api/chat"]
+  Search["Azure AI Search\nsrch-index-bookstore-dev"]
 
   UI --> GW
   GW --> CC
@@ -179,10 +208,12 @@ flowchart LR
   GW --> RS
   GW --> MD
   GW --> Scout
+  GW --> Reviews
 
   CC --> CS
   CC --> RS
   CC --> MD
+  CC --> Reviews
   SM --> CS
   SM --> RS
   SM --> MD
@@ -197,6 +228,8 @@ flowchart LR
   RS --> StoreOps
   Scout --> Upcoming
   Scout --> Ollama
+  Reviews --> DB
+  Reviews --> Search
 
   Catalog --> DB
   Customer --> DB
@@ -249,8 +282,8 @@ resources for `ModelAPI`, `MCPServer`, and `Agent` workloads, including:
 - `MCPServer/upcoming-releases` for Tavily-backed internet search
 - `Agent/release-scout` for upcoming book-release scouting
 
-Build all images, including the frontend image that contains Release Scout,
-agent-specific prompt recommendations, and local chat history:
+Build all images, including the frontend image that contains agent-specific
+prompt recommendations and local chat history:
 
 ```bash
 make docker-build-all-images
@@ -306,6 +339,12 @@ Job, Upcoming Releases MCP server, and Release Scout agent. It does not include
 a plain Kubernetes browser frontend manifest; use the KAOS overlay or Docker
 Compose when you need the browser UI.
 
+Review Summarizer is currently wired for local Docker Compose and direct local
+service runs. Kubernetes manifests for that agent and the Azure AI Search review
+configuration are intentionally deferred. If you deploy the latest frontend
+image to Kubernetes before adding those manifests, the Review Summarizer option
+can appear in the UI but will not have a backing Kubernetes agent service.
+
 ## Observability
 
 Observability is disabled in the lighter runtime stack and enabled by the full
@@ -336,9 +375,10 @@ its console on `9091`.
 
 ## Browser UI
 
-The frontend has a left-pane agent list for the six built-in gateway agent keys
-and sends messages through the `frontend-gateway`. In the runtime stack, Release
-Scout is selectable and backed by Ollama.
+The frontend has a left-pane agent list for the seven built-in gateway agent
+keys and sends messages through the `frontend-gateway`. In the runtime stack,
+Release Scout is selectable and backed by Ollama; Review Summarizer is
+selectable and backed by Azure AI Search.
 The active run timeline appears inline below each user message, so longer
 conversations scroll inside the conversation pane instead of creating a second
 page-level timeline.

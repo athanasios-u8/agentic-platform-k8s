@@ -13,12 +13,16 @@ It assumes the KAOS operator and CRDs are already installed in the cluster.
 - `MCPServer/customer`: existing Customer FastMCP server as a custom runtime
 - `MCPServer/store-operations`: existing Store Operations FastMCP server as a custom runtime
 - `MCPServer/upcoming-releases`: Tavily-backed FastMCP server for upcoming book releases
-- Six `Agent` resources that run the bookstore agent images
+- Six `Agent` resources that run the current KAOS-deployed bookstore agent images
   - Existing agents use `ModelAPI/openai`
   - `Agent/release-scout` uses `ModelAPI/llama3-2-3b` and the upcoming releases MCP server
 - `frontend-gateway`: API gateway for chat and approvals
 - `frontend`: browser UI served by nginx
 - Postgres, config, secret, and demo-data reset resources needed by the bookstore stack
+
+Review Summarizer is available in the local Docker Compose stack, but this
+KAOS overlay has not added its `Agent` resource, service routing, or Azure AI
+Search secrets yet.
 
 ## Layout
 
@@ -47,6 +51,8 @@ Each deployable unit has its own folder and local `kustomization.yaml`:
 - `frontend-gateway/`
 - `frontend/`
 
+There is intentionally no `review-summarizer-agent/` folder in this round.
+
 The custom agent images preserve the current bookstore runtime behavior,
 including the human approval flow for mutating tools. The OpenAI-backed agents
 receive `MODEL_API_URL` from `ModelAPI/openai` and use it as an
@@ -65,7 +71,8 @@ make docker-build-all-images
 
 This rebuilds the browser frontend image too, which is required for the current
 agent list, prompt recommendations, and browser-local recent chat history to
-appear in the UI.
+appear in the UI. The current frontend includes Review Summarizer in the agent
+list, but this KAOS overlay does not provide the backing agent service yet.
 
 For a shared cluster, push the images and update the `image:` fields in
 the relevant component folders.

@@ -4,6 +4,7 @@ from bookstore_agents.agents.customer_concierge.agent import get_spec as concier
 from bookstore_agents.agents.message_drafter.agent import get_spec as drafter_spec
 from bookstore_agents.agents.release_scout.agent import get_spec as release_scout_spec
 from bookstore_agents.agents.reservation_specialist.agent import get_spec as reservation_spec
+from bookstore_agents.agents.review_summarizer.agent import get_spec as review_summarizer_spec
 from bookstore_agents.agents.store_manager.agent import get_spec as manager_spec
 from bookstore_agents.common.config import get_settings
 
@@ -16,11 +17,12 @@ def test_agent_roles_and_independent_ports() -> None:
         reservation_spec(),
         drafter_spec(),
         release_scout_spec(),
+        review_summarizer_spec(),
     ]
     assert {spec.role for spec in specs} == {"master", "subagent"}
     assert [spec.role for spec in specs].count("master") == 2
-    assert [spec.role for spec in specs].count("subagent") == 4
-    assert len({spec.port for spec in specs}) == 6
+    assert [spec.role for spec in specs].count("subagent") == 5
+    assert len({spec.port for spec in specs}) == 7
 
 
 def test_message_drafter_has_no_tools() -> None:
@@ -42,11 +44,20 @@ def test_release_scout_uses_ollama_and_upcoming_releases_mcp(monkeypatch) -> Non
         get_settings.cache_clear()
 
 
+def test_review_summarizer_has_no_mcp_and_uses_openai() -> None:
+    spec = review_summarizer_spec()
+    assert spec.model_provider == "openai"
+    assert spec.mcp_servers == {}
+    assert spec.subagents == {}
+
+
 def test_master_agents_can_reach_subagents() -> None:
     for spec in [concierge_spec(), manager_spec()]:
         assert "catalog_specialist" in spec.subagents
         assert "reservation_specialist" in spec.subagents
         assert "message_drafter" in spec.subagents
+    assert "review_summarizer" in concierge_spec().subagents
+    assert "review_summarizer" not in manager_spec().subagents
 
 
 def test_store_manager_detects_pickup_cancellation_request() -> None:

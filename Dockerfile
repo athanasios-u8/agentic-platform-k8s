@@ -25,7 +25,7 @@ RUN uv sync --frozen --no-dev --no-cache \
 
 USER bookstore
 
-EXPOSE 8101 8102 8103 8104 8201 8202 8203 8204 8205 8206 8300
+EXPOSE 8101 8102 8103 8104 8201 8202 8203 8204 8205 8206 8207 8300
 
 ENTRYPOINT ["/bin/sh", "/app/docker/entrypoint.sh"]
 CMD []

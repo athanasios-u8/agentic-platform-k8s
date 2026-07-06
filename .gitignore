@@ -10,3 +10,4 @@ __pycache__/
 deploy-secret.sh
 deploy-resources.sh
 .LOCAL_KEYS
+data/book_reviews/*.jsonl

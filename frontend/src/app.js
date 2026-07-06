@@ -74,6 +74,17 @@ const agents = [
       "Which upcoming science fiction titles should I watch?",
     ],
   },
+  {
+    key: "review_summarizer",
+    name: "Review Summarizer",
+    description: "Summarizes indexed reader reviews for a book.",
+    prompts: [
+      "What do people like and dislike about The Lantern Cipher?",
+      "Summarize the reviews for Signal from Glass Moon.",
+      "What are readers saying about The Glass Forest?",
+      "Are reviews for Dead Drop at Dawn mostly positive or negative?",
+    ],
+  },
 ];
 
 const agentByKey = Object.fromEntries(agents.map((agent) => [agent.key, agent]));

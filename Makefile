@@ -10,7 +10,7 @@ COMPOSE_PARALLEL_LIMIT ?= 1
 .PHONY: docker-build-customer-concierge-agent
 .PHONY: docker-build-store-manager-agent docker-build-catalog-specialist-agent
 .PHONY: docker-build-reservation-specialist-agent docker-build-message-drafter-agent
-.PHONY: docker-build-release-scout-agent
+.PHONY: docker-build-release-scout-agent docker-build-review-summarizer-agent
 .PHONY: docker-build-frontend-gateway docker-build-frontend docker-build-agent-mcp-images
 .PHONY: docker-build-backend-images docker-build-all-images
 
@@ -95,13 +95,16 @@ docker-build-message-drafter-agent:
 docker-build-release-scout-agent:
 	docker build --build-arg BOOKSTORE_SERVICE_MODULE=bookstore_agents.agents.release_scout.server -t $(BACKEND_IMAGE_PREFIX)/release-scout-agent:$(IMAGE_TAG) .
 
+docker-build-review-summarizer-agent:
+	docker build --build-arg BOOKSTORE_SERVICE_MODULE=bookstore_agents.agents.review_summarizer.server -t $(BACKEND_IMAGE_PREFIX)/review-summarizer-agent:$(IMAGE_TAG) .
+
 docker-build-frontend-gateway:
 	docker build --build-arg BOOKSTORE_SERVICE_MODULE=bookstore_agents.frontend_gateway.server -t $(BACKEND_IMAGE_PREFIX)/frontend-gateway:$(IMAGE_TAG) .
 
 docker-build-frontend:
 	docker build -t $(FRONTEND_IMAGE_PREFIX)/frontend:$(IMAGE_TAG) frontend
 
-docker-build-agent-mcp-images: docker-build-catalog-mcp docker-build-customer-mcp docker-build-store-operations-mcp docker-build-upcoming-releases-mcp docker-build-customer-concierge-agent docker-build-store-manager-agent docker-build-catalog-specialist-agent docker-build-reservation-specialist-agent docker-build-message-drafter-agent docker-build-release-scout-agent
+docker-build-agent-mcp-images: docker-build-catalog-mcp docker-build-customer-mcp docker-build-store-operations-mcp docker-build-upcoming-releases-mcp docker-build-customer-concierge-agent docker-build-store-manager-agent docker-build-catalog-specialist-agent docker-build-reservation-specialist-agent docker-build-message-drafter-agent docker-build-release-scout-agent docker-build-review-summarizer-agent
 
 docker-build-backend-images: docker-build-backend-base docker-build-agent-mcp-images docker-build-frontend-gateway
 

@@ -2,18 +2,20 @@
 
 ## Overview
 
-This scenario describes a small bookstore assistant platform made of six independently callable agents. The agents focus only on bookstore workflows: customer discovery, book reservations, store operations, message drafting, and upcoming release scouting.
+This scenario describes a small bookstore assistant platform made of seven independently callable agents. The agents focus only on bookstore workflows: customer discovery, book reservations, store operations, message drafting, upcoming release scouting, and review summarization.
 
 The platform demonstrates:
 
-- Six agents total
-- Four subagents and two master agents
+- Seven agents total
+- Five subagents and two master agents
 - Every agent callable independently
 - MCP tool connectivity for most agents
 - One subagent with no tools
 - One Ollama-backed subagent for internet-backed release scouting
+- One Azure AI Search-backed subagent for review summarization
 - Master-to-subagent A2A communication
 - Database-backed read and write workflows
+- OpenAI-generated synthetic review data stored locally as JSONL and indexed unchunked
 
 ## MCP Server Split
 
@@ -26,6 +28,8 @@ Use four MCP servers. This keeps the demo simple while still showing clear capab
 | Customer MCP | Customers, loyalty status, preferences | Keeps customer data isolated from product and store operations. |
 | Upcoming Releases MCP | Internet search for upcoming releases | Keeps external Tavily-backed web search separate from internal bookstore data. |
 
+Review Summarizer deliberately does not add a fifth MCP server in this round. It reads the local Postgres catalog to resolve book titles, then queries Azure AI Search directly for review documents in `srch-index-bookstore-dev`.
+
 ## Agents
 
 | Agent | Type | Independently callable? | MCP tools | What it does |
@@ -36,6 +40,7 @@ Use four MCP servers. This keeps the demo simple while still showing clear capab
 | Reservation Specialist | Subagent | Yes | Store Operations MCP, Customer MCP | Creates, updates, cancels, and reviews reservations through approval-gated write flows; checks whether a customer has existing pickups or loyalty benefits. |
 | Message Drafter | Subagent | Yes | No tools | Turns supplied context into polished customer messages, staff briefings, pickup confirmations, or apology notes. |
 | Release Scout | Subagent | Yes | Upcoming Releases MCP | Searches for upcoming book releases by theme, genre, or author, then uses local Ollama `llama3.2:3b` to summarize source-backed leads. |
+| Review Summarizer | Subagent | Yes | No MCP tools; uses Azure AI Search directly | Resolves a book title, filters indexed reviews by normalized title metadata, retrieves top-k review documents, and summarizes what readers like or dislike. |
 
 ## Agent Descriptions
 
@@ -49,6 +54,7 @@ Typical responsibilities:
 - Ask the Catalog Specialist for book recommendations
 - Ask the Reservation Specialist to check availability or create reservations
 - Ask the Message Drafter to polish customer-facing responses
+- Ask the Review Summarizer when a shopper asks about reviews or reader opinions
 - Use customer information when loyalty status or preferences are relevant
 
 Example request:
@@ -140,6 +146,24 @@ Example request:
 
 > Find upcoming cozy fantasy releases.
 
+### Review Summarizer
+
+The Review Summarizer is an independently callable subagent for review questions. It is also called by Customer Concierge when the shopper asks what people like, dislike, or think about a specific catalog title.
+
+Review data is generated from the current Postgres `books` table with OpenAI, written to local JSONL, and uploaded unchunked to Azure AI Search. The agent retrieves only review documents that match the resolved book title metadata, then summarizes the retrieved evidence without inventing additional opinions.
+
+Typical responsibilities:
+
+- Resolve a requested book title against the local catalog
+- Query Azure AI Search index `srch-index-bookstore-dev`
+- Filter reviews by `book_title_normalized`
+- Retrieve the configured top-k reviews, defaulting to 15
+- Summarize positive themes, negative themes, and sentiment balance
+
+Example request:
+
+> What do people like and dislike about The Lantern Cipher?
+
 ## A2A Topology
 
 ```mermaid
@@ -152,6 +176,7 @@ flowchart TD
   RS["Reservation Specialist\nSubagent"]
   MD["Message Drafter\nSubagent, no tools"]
   Scout["Release Scout\nSubagent, Ollama"]
+  Reviews["Review Summarizer\nSubagent, Azure AI Search"]
 
   GW --> CC
   GW --> SM
@@ -159,10 +184,12 @@ flowchart TD
   GW --> RS
   GW --> MD
   GW --> Scout
+  GW --> Reviews
 
   CC -->|A2A| CS
   CC -->|A2A| RS
   CC -->|A2A| MD
+  CC -->|A2A review questions| Reviews
 
   SM -->|A2A| CS
   SM -->|A2A| RS
@@ -179,6 +206,7 @@ flowchart LR
     CS["Catalog Specialist"]
     RS["Reservation Specialist"]
     MD["Message Drafter"]
+    Reviews["Review Summarizer"]
   end
 
   Scout["Release Scout\nOllama-backed"]
@@ -191,6 +219,9 @@ flowchart LR
   DB[("PostgreSQL")]
   Tavily["Tavily Search API"]
   Ollama["Ollama llama3.2:3b"]
+  Search["Azure AI Search\nsrch-index-bookstore-dev"]
+  JSONL["Local review JSONL\nignored generated artifact"]
+  OpenAI["OpenAI\nreview generation + summarization"]
 
   CC --> Catalog
   CC --> Customer
@@ -200,6 +231,9 @@ flowchart LR
   CS --> Catalog
   RS --> Customer
   RS --> StoreOps
+  Reviews --> DB
+  Reviews --> Search
+  Reviews --> OpenAI
   Scout --> Upcoming
   Scout --> Ollama
 
@@ -207,6 +241,8 @@ flowchart LR
   Customer --> DB
   StoreOps --> DB
   Upcoming --> Tavily
+  JSONL --> Search
+  OpenAI --> JSONL
 ```
 
 ## Example Customer Reservation Flow
@@ -259,6 +295,55 @@ sequenceDiagram
   Scout-->>GW: Answer with source URLs
   GW-->>User: Upcoming release leads
 ```
+
+## Example Review Summarizer Flow
+
+A shopper asks:
+
+> What do people like and dislike about The Lantern Cipher?
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant GW as Frontend Gateway
+  participant CC as Customer Concierge
+  participant Reviews as Review Summarizer
+  participant DB as PostgreSQL catalog
+  participant Search as Azure AI Search
+  participant OpenAI as OpenAI
+
+  User->>GW: Ask Customer Concierge about reader opinions
+  GW->>CC: Send customer-concierge chat request
+  CC->>Reviews: Delegate review question by A2A
+  Reviews->>DB: Resolve requested title against books
+  DB-->>Reviews: Book metadata and normalized title
+  Reviews->>Search: Search reviews with book_title_normalized filter and top-k
+  Search-->>Reviews: Relevant review documents
+  Reviews->>OpenAI: Summarize retrieved review context only
+  OpenAI-->>Reviews: Likes, dislikes, and sentiment balance
+  Reviews-->>CC: Review summary
+  CC-->>GW: Customer-facing answer
+  GW-->>User: What readers like and dislike
+```
+
+## Review Data And Azure AI Search Setup
+
+Review data is configured outside Kubernetes in this first round. The generated JSONL file is local and ignored by Git; Azure AI Search credentials remain in `.env`.
+
+```bash
+# Reset Postgres demo data before generating reviews
+make reset-db
+
+# Generate reviews, create/update srch-index-bookstore-dev, and upload documents
+docker compose run --rm bookstore-cli bookstore-ai-search rebuild
+
+# Or run each step separately
+docker compose run --rm bookstore-cli bookstore-ai-search generate-reviews
+docker compose run --rm bookstore-cli bookstore-ai-search create-index
+docker compose run --rm bookstore-cli bookstore-ai-search upload-reviews
+```
+
+The index stores whole review paragraphs with searchable title, headline, author, genre, and review text fields. Metadata fields such as `book_title_normalized`, `book_id`, `isbn`, `genre`, `sentiment`, and `rating` are filterable or sortable as needed. No chunking or vector fields are used for reviews.
 
 ## Example Staff Briefing Flow
 
@@ -318,6 +403,8 @@ human approves the request through the frontend or gateway API.
 | Customer MCP | `lookup_loyalty_status` | Check loyalty tier or benefits. |
 | Customer MCP | `update_customer_preferences` | Add or update customer reading preferences. |
 | Upcoming Releases MCP | `search_upcoming_book_releases` | Search the web for upcoming releases by author, theme, or genre. |
+
+Review Summarizer does not expose a FastMCP tool. Its internal retrieval step appears in the agent timeline as `search_book_reviews`, backed by Azure AI Search rather than an MCP server.
 
 ## Example Pickup Cancellation Flow
 

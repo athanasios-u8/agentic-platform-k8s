@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "a2a-sdk[fastapi]",
+    "azure-search-documents>=11.6.0",
     "fastapi>=0.115.0",
     "fastmcp>=3.2.4",
     "httpx>=0.27.0",
@@ -35,6 +36,7 @@ dev = [
 bookstore-init-db = "scripts.init_db:main"
 bookstore-seed-data = "scripts.seed_fake_data:main"
 bookstore-reset-data = "scripts.reset_demo_data:main"
+bookstore-ai-search = "bookstore_agents.azure_ai_search.cli:main"
 
 [build-system]
 requires = ["hatchling"]

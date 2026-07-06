@@ -64,3 +64,9 @@ def test_frontend_includes_release_scout_agent_option() -> None:
     app_js = Path("frontend/src/app.js").read_text()
     assert 'key: "release_scout"' in app_js
     assert 'name: "Release Scout"' in app_js
+
+
+def test_frontend_includes_review_summarizer_agent_option() -> None:
+    app_js = Path("frontend/src/app.js").read_text()
+    assert 'key: "review_summarizer"' in app_js
+    assert 'name: "Review Summarizer"' in app_js

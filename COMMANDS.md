@@ -162,6 +162,11 @@ MCP servers, agents, gateway, Postgres, Ollama, the model-pull Job, Upcoming
 Releases MCP, and Release Scout as regular Kubernetes resources. It does not
 include a plain Kubernetes browser frontend manifest.
 
+Review Summarizer is currently local/Compose-only; Kubernetes manifests and
+Azure AI Search secrets for that agent are intentionally deferred. The latest
+frontend image can show the Review Summarizer option in Kubernetes, but that
+option is not backed by a Kubernetes agent service yet.
+
 ```bash
 # Apply and inspect the plain Kubernetes stack
 kubectl apply -k k8s/base
@@ -321,6 +326,7 @@ uv run python -m bookstore_agents.agents.catalog_specialist.server
 uv run python -m bookstore_agents.agents.reservation_specialist.server
 uv run python -m bookstore_agents.agents.message_drafter.server
 uv run python -m bookstore_agents.agents.release_scout.server
+uv run python -m bookstore_agents.agents.review_summarizer.server
 
 # Frontend gateway
 uv run python -m bookstore_agents.frontend_gateway.server
@@ -369,6 +375,12 @@ curl -N http://localhost:8300/chat \
 curl -N http://localhost:8300/chat \
   -H 'Content-Type: application/json' \
   -d '{"agent":"release_scout","message":"Find upcoming cozy fantasy releases."}'
+
+# Prepare and query Review Summarizer; requires seeded Postgres and Azure AI Search config
+docker compose run --rm bookstore-cli bookstore-ai-search rebuild
+curl -N http://localhost:8300/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"agent":"review_summarizer","message":"What do people like and dislike about The Lantern Cipher?"}'
 
 # Approval inspection and resolution
 curl -fsS http://localhost:8300/approvals

@@ -8,6 +8,8 @@ from bookstore_agents.agents.common.agent_cards import AgentSpec
 from bookstore_agents.agents.common.mcp_client import MCPClient
 from bookstore_agents.agents.common.ollama_runtime import OllamaTextRuntime
 from bookstore_agents.agents.common.openai_runtime import OpenAITextRuntime
+from bookstore_agents.azure_ai_search.search import AzureSearchConfigError
+from bookstore_agents.azure_ai_search.service import BookReviewSearchService
 from bookstore_agents.common.approvals import WRITE_TOOLS, create_approval
 from bookstore_agents.common.observability import (
     mark_span_error,
@@ -34,6 +36,7 @@ class AgentRuntime:
         self.catalog_repo = CatalogRepository()
         self.customer_repo = CustomerRepository()
         self.store_repo = StoreOperationsRepository()
+        self.review_service = BookReviewSearchService()
 
     async def run(
         self, message: str, context: dict[str, Any] | None = None
@@ -82,6 +85,9 @@ class AgentRuntime:
                 yield event
         elif self.spec.slug == "release-scout":
             async for event in self._run_release_scout(message, context):
+                yield event
+        elif self.spec.slug == "review-summarizer":
+            async for event in self._run_review_summarizer(message, context):
                 yield event
         else:
             yield {"type": "final", "agent": self.spec.name, "answer": "Unknown agent."}
@@ -303,6 +309,18 @@ class AgentRuntime:
         message: str,
         context: dict[str, Any],
     ) -> AsyncIterator[dict[str, Any]]:
+        if self._is_review_question(message.lower()):
+            review_result = await self._call_subagent("review_summarizer", message, context)
+            yield review_result
+            yield {
+                "type": "final",
+                "agent": self.spec.name,
+                "answer": review_result.get("answer")
+                or "I could not retrieve review details for that book.",
+                "data": {"review_summary": review_result},
+            }
+            return
+
         catalog_result = await self._call_subagent("catalog_specialist", message, context)
         yield catalog_result
         reservation_result = None
@@ -463,6 +481,97 @@ class AgentRuntime:
             "answer": answer,
             "data": {"release_search": release_search},
         }
+
+    async def _run_review_summarizer(
+        self,
+        message: str,
+        context: dict[str, Any],
+    ) -> AsyncIterator[dict[str, Any]]:
+        requested_title = context.get("book_title") or context.get("title")
+        try:
+            book = self.review_service.resolve_book(message, requested_title)
+        except Exception as exc:
+            yield {
+                "type": "final",
+                "agent": self.spec.name,
+                "answer": f"I could not read the local book catalog to resolve the title: {exc}",
+                "data": {"error": "catalog_resolution_failed"},
+            }
+            return
+
+        if not book:
+            yield {
+                "type": "final",
+                "agent": self.spec.name,
+                "answer": (
+                    "I could not identify the book title in that request. "
+                    "Please include the exact catalog title."
+                ),
+                "data": {"resolution_failed": True},
+            }
+            return
+
+        top_k = int(context.get("top_k") or context.get("limit") or 0)
+        if top_k <= 0:
+            from bookstore_agents.common.config import get_settings
+
+            top_k = get_settings().book_review_search_top_k
+
+        arguments = {
+            "book_title": book.title,
+            "book_title_normalized": book.title_normalized,
+            "top_k": top_k,
+        }
+        yield {
+            "type": "tool_call_requested",
+            "tool": "search_book_reviews",
+            "arguments": arguments,
+        }
+
+        try:
+            reviews = self.review_service.search_for_book(book, message, top_k)
+        except AzureSearchConfigError as exc:
+            yield {
+                "type": "final",
+                "agent": self.spec.name,
+                "answer": f"Azure AI Search is not configured for review retrieval: {exc}",
+                "data": {"book": book.model_dump(), "configuration_error": True},
+            }
+            return
+        except Exception as exc:
+            yield {
+                "type": "final",
+                "agent": self.spec.name,
+                "answer": f"I could not retrieve reviews for {book.title}: {exc}",
+                "data": {"book": book.model_dump(), "search_error": True},
+            }
+            return
+
+        yield {
+            "type": "tool_call_completed",
+            "tool": "search_book_reviews",
+            "result": reviews,
+        }
+
+        if not reviews:
+            yield {
+                "type": "final",
+                "agent": self.spec.name,
+                "answer": f"I did not find indexed reviews for {book.title}.",
+                "data": {"book": book.model_dump(), "reviews": []},
+            }
+            return
+
+        data = {"book": book.model_dump(), "reviews": reviews, "top_k": top_k}
+        fallback = self._format_review_summary(book.title, reviews)
+        answer = await self.text_runtime.polish(
+            self.spec.name,
+            self.spec.instructions,
+            message,
+            data,
+            fallback,
+        )
+        yield {"type": "final", "agent": self.spec.name, "answer": answer, "data": data}
 
     async def _call_subagent(
         self,
@@ -635,6 +744,22 @@ class AgentRuntime:
             term in lowered for term in list_terms
         )
 
+    def _is_review_question(self, lowered: str) -> bool:
+        review_terms = (
+            "review",
+            "reviews",
+            "reader",
+            "readers",
+            "people like",
+            "people dislike",
+            "customers like",
+            "customers dislike",
+            "what do people think",
+            "what did people think",
+            "opinions",
+        )
+        return any(term in lowered for term in review_terms)
+
     def _format_book_recommendations(self, books: list[dict[str, Any]]) -> str:
         if not books:
             return "I could not find matching books."
@@ -681,6 +806,34 @@ class AgentRuntime:
         if release_search.get("answer"):
             lines.append("")
             lines.append(str(release_search["answer"]))
+        return "\n".join(lines)
+
+    def _format_review_summary(self, title: str, reviews: list[dict[str, Any]]) -> str:
+        counts = {"positive": 0, "negative": 0, "neutral": 0}
+        for review in reviews:
+            sentiment = str(review.get("sentiment", "neutral"))
+            if sentiment in counts:
+                counts[sentiment] += 1
+
+        lines = [
+            f"I found {len(reviews)} indexed reviews for {title}.",
+            (
+                "Sentiment mix: "
+                f"{counts['positive']} positive, "
+                f"{counts['negative']} negative, "
+                f"{counts['neutral']} neutral."
+            ),
+            "",
+            "Representative review notes:",
+        ]
+        for review in reviews[:5]:
+            rating = review.get("rating")
+            headline = review.get("headline") or "Untitled review"
+            sentiment = review.get("sentiment") or "unknown"
+            text = review.get("review_text") or ""
+            if len(text) > 180:
+                text = f"{text[:177]}..."
+            lines.append(f"- {headline} ({rating}/5, {sentiment}): {text}")
         return "\n".join(lines)
 
     def _draft_message(self, message: str, context: dict[str, Any]) -> str:

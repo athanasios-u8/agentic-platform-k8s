@@ -2,6 +2,16 @@ x-backend-env: &backend-env
   OPENAI_API_KEY: ${OPENAI_API_KEY:-}
   OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.5}
   OPENAI_TRACING_ENABLED: ${OPENAI_TRACING_ENABLED:-true}
+  AZURE_AI_SEARCH_ENDPOINT: ${AZURE_AI_SEARCH_ENDPOINT:-}
+  AZURE_AI_SEARCH_ADMIN_KEY: ${AZURE_AI_SEARCH_ADMIN_KEY:-}
+  AZURE_AI_SEARCH_QUERY_KEY: ${AZURE_AI_SEARCH_QUERY_KEY:-}
+  AZURE_AI_SEARCH_INDEX_NAME: ${AZURE_AI_SEARCH_INDEX_NAME:-srch-index-bookstore-dev}
+  BOOK_REVIEW_SEARCH_TOP_K: ${BOOK_REVIEW_SEARCH_TOP_K:-15}
+  BOOK_REVIEW_DATA_PATH: ${BOOK_REVIEW_DATA_PATH:-data/book_reviews/book_reviews.jsonl}
+  BOOK_REVIEW_MIN_REVIEWS: ${BOOK_REVIEW_MIN_REVIEWS:-10}
+  BOOK_REVIEW_MAX_REVIEWS: ${BOOK_REVIEW_MAX_REVIEWS:-15}
+  BOOK_REVIEW_RANDOM_SEED: ${BOOK_REVIEW_RANDOM_SEED:-42}
+  BOOK_REVIEW_GENERATION_MODEL: ${BOOK_REVIEW_GENERATION_MODEL:-}
   OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
   OLLAMA_API_KEY: ${OLLAMA_API_KEY:-ollama}
@@ -20,6 +30,7 @@ x-backend-env: &backend-env
   RESERVATION_SPECIALIST_AGENT_URL: ${RESERVATION_SPECIALIST_AGENT_URL:-http://reservation-specialist-agent:8204}
   MESSAGE_DRAFTER_AGENT_URL: ${MESSAGE_DRAFTER_AGENT_URL:-http://message-drafter-agent:8205}
   RELEASE_SCOUT_AGENT_URL: ${RELEASE_SCOUT_AGENT_URL:-http://release-scout-agent:8206}
+  REVIEW_SUMMARIZER_AGENT_URL: ${REVIEW_SUMMARIZER_AGENT_URL:-http://review-summarizer-agent:8207}
   APPROVAL_REQUIRED_FOR_WRITES: ${APPROVAL_REQUIRED_FOR_WRITES:-true}
   APPROVAL_STATE_STORE: ${APPROVAL_STATE_STORE:-postgres}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -80,6 +91,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./data/book_reviews:/app/data/book_reviews
     profiles:
       - cli
     command: ["python", "-m", "scripts.reset_demo_data"]
@@ -244,6 +257,26 @@ services:
       timeout: 5s
       retries: 12
 
+  review-summarizer-agent:
+    image: ${BACKEND_IMAGE_PREFIX:-bookstore}/review-summarizer-agent:${IMAGE_TAG:-local}
+    build:
+      <<: *backend-build
+      args:
+        BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.review_summarizer.server
+    environment:
+      <<: *backend-env
+      BOOKSTORE_SERVICE_MODULE: bookstore_agents.agents.review_summarizer.server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${REVIEW_SUMMARIZER_AGENT_HOST_PORT:-8207}:8207"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8207/healthz').read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   customer-concierge-agent:
     image: ${BACKEND_IMAGE_PREFIX:-bookstore}/customer-concierge-agent:${IMAGE_TAG:-local}
     build:
@@ -259,6 +292,8 @@ services:
       reservation-specialist-agent:
         condition: service_healthy
       message-drafter-agent:
+        condition: service_healthy
+      review-summarizer-agent:
         condition: service_healthy
     ports:
       - "${CUSTOMER_CONCIERGE_AGENT_HOST_PORT:-8201}:8201"
@@ -313,6 +348,8 @@ services:
       reservation-specialist-agent:
         condition: service_healthy
       message-drafter-agent:
+        condition: service_healthy
+      review-summarizer-agent:
         condition: service_healthy
     ports:
       - "${FRONTEND_GATEWAY_HOST_PORT:-8300}:8300"

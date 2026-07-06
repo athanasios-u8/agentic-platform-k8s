@@ -39,6 +39,7 @@ def agent_urls() -> dict[str, str]:
         "reservation_specialist": settings.reservation_specialist_agent_url,
         "message_drafter": settings.message_drafter_agent_url,
         "release_scout": settings.release_scout_agent_url,
+        "review_summarizer": settings.review_summarizer_agent_url,
     }
 
 

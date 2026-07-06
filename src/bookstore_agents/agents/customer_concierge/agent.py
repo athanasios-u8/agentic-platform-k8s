@@ -23,6 +23,7 @@ def get_spec() -> AgentSpec:
             "catalog_specialist": settings.catalog_specialist_agent_url,
             "reservation_specialist": settings.reservation_specialist_agent_url,
             "message_drafter": settings.message_drafter_agent_url,
+            "review_summarizer": settings.review_summarizer_agent_url,
         },
         instructions=CUSTOMER_CONCIERGE_PROMPT,
     )
