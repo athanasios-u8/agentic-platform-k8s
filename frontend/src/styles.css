@@ -8,8 +8,9 @@
   --surface: #ffffff;
   --soft: #f7f7f8;
   --hover: #f3f4f6;
-  --accent: #10a37f;
-  --accent-strong: #0d8a6a;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft: #eff6ff;
   --blue: #2563eb;
   --danger: #b42318;
 }
@@ -45,9 +46,8 @@ button {
   cursor: pointer;
 }
 
-button:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid rgba(16, 163, 127, 0.32);
+button:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.32);
   outline-offset: 2px;
 }
 
@@ -370,7 +370,7 @@ h2 {
 }
 
 .approval-actions button,
-.composer button {
+.composer .send-button {
   border: 1px solid var(--accent);
   background: var(--accent);
   color: #fff;
@@ -384,7 +384,7 @@ h2 {
 }
 
 .approval-actions button:hover,
-.composer button:hover {
+.composer .send-button:hover:not(:disabled) {
   background: var(--accent-strong);
 }
 
@@ -469,23 +469,40 @@ pre {
 
 .recommendations {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
 }
 
 .carousel-control {
-  min-height: 32px;
-  border: 1px solid var(--line);
+  display: grid;
+  width: 34px;
+  min-width: 34px;
+  min-height: 34px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
-  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.08);
 }
 
 .carousel-control:hover {
-  background: var(--hover);
-  color: var(--ink);
+  border-color: #bfdbfe;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.carousel-control svg,
+.send-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
 }
 
 .recommendation-track {
@@ -527,12 +544,18 @@ pre {
   box-shadow: 0 12px 32px rgba(17, 24, 39, 0.08);
 }
 
+.composer:focus-within {
+  border-color: #bfdbfe;
+  box-shadow: 0 12px 32px rgba(17, 24, 39, 0.08), 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
 textarea {
   width: 100%;
   min-height: 50px;
   max-height: 190px;
   resize: vertical;
   border: 0;
+  outline: 0;
   background: transparent;
   color: var(--ink);
   line-height: 1.45;
@@ -542,10 +565,23 @@ textarea::placeholder {
   color: var(--faint);
 }
 
-.composer button {
-  min-width: 72px;
-  min-height: 38px;
-  padding: 8px 14px;
+.composer .send-button {
+  display: grid;
+  width: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
+}
+
+.composer .send-button:disabled {
+  border-color: #dbeafe;
+  background: var(--accent-soft);
+  color: #93c5fd;
+  opacity: 1;
+  box-shadow: none;
 }
 
 @media (max-width: 1040px) {
@@ -606,14 +642,6 @@ textarea::placeholder {
   }
 
   .recommendations {
-    grid-template-columns: 28px minmax(0, 1fr) 28px;
-  }
-
-  .composer {
-    grid-template-columns: 1fr;
-  }
-
-  .composer button {
-    width: 100%;
+    grid-template-columns: 32px minmax(0, 1fr) 32px;
   }
 }

@@ -91,6 +91,7 @@ const agentByKey = Object.fromEntries(agents.map((agent) => [agent.key, agent]))
 
 const form = document.querySelector("#chat-form");
 const input = document.querySelector("#message-input");
+const sendButton = document.querySelector("#send-button");
 const messages = document.querySelector("#messages");
 const approvals = document.querySelector("#approval-list");
 const agentList = document.querySelector("#agent-list");
@@ -239,12 +240,17 @@ function setActiveChat(chat) {
   state.activeAgent = chat.agent;
 }
 
+function updateSendButtonState() {
+  sendButton.disabled = input.value.trim().length === 0;
+}
+
 function startNewChat(agentKey = state.activeAgent) {
   const chat = createChat(agentKey);
   state.chats.unshift(chat);
   setActiveChat(chat);
   latestTimeline = null;
   input.value = "";
+  updateSendButtonState();
   saveState();
   renderAll();
 }
@@ -472,6 +478,7 @@ function renderRecommendations() {
     button.textContent = prompt;
     button.addEventListener("click", () => {
       input.value = prompt;
+      updateSendButtonState();
       input.focus();
     });
     recommendationTrack.appendChild(button);
@@ -494,6 +501,7 @@ function selectAgent(agentKey) {
     chat.updatedAt = nowIso();
     setActiveChat(chat);
     input.value = "";
+    updateSendButtonState();
     saveState();
     renderAll();
     loadApprovals();
@@ -511,6 +519,7 @@ function selectChat(chatId) {
   setActiveChat(chat);
   latestTimeline = null;
   input.value = "";
+  updateSendButtonState();
   saveState();
   renderAll();
   loadApprovals();
@@ -530,6 +539,7 @@ function deleteChat(chatId) {
 
   latestTimeline = null;
   input.value = "";
+  updateSendButtonState();
   saveState();
   renderAll();
   loadApprovals();
@@ -575,6 +585,7 @@ async function sendMessage(prompt) {
   chat.updatedAt = timestamp;
   state.activeAgent = agent;
   input.value = "";
+  updateSendButtonState();
   saveState();
   renderChats();
   renderAgents();
@@ -682,8 +693,11 @@ async function resolveApproval(id, action) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const prompt = input.value.trim();
+  updateSendButtonState();
   if (prompt) await sendMessage(prompt);
 });
+
+input.addEventListener("input", updateSendButtonState);
 
 newChatButton.addEventListener("click", () => startNewChat(state.activeAgent));
 
@@ -698,4 +712,5 @@ recommendationNext.addEventListener("click", () => {
 loadState();
 ensureActiveChat();
 renderAll();
+updateSendButtonState();
 loadApprovals();

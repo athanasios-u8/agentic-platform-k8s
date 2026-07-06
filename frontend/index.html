@@ -52,13 +52,26 @@
         </div>
         <div class="composer-wrap">
           <section class="recommendations" aria-label="Recommended prompts">
-            <button id="recommendation-prev" class="carousel-control" type="button" aria-label="Previous recommendations">&lt;</button>
+            <button id="recommendation-prev" class="carousel-control" type="button" aria-label="Previous recommendations">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
             <div id="recommendation-track" class="recommendation-track"></div>
-            <button id="recommendation-next" class="carousel-control" type="button" aria-label="Next recommendations">&gt;</button>
+            <button id="recommendation-next" class="carousel-control" type="button" aria-label="Next recommendations">
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
           </section>
           <form id="chat-form" class="composer">
             <textarea id="message-input" rows="2" placeholder="Message Bookstore Assistant"></textarea>
-            <button type="submit">Send</button>
+            <button id="send-button" class="send-button" type="submit" aria-label="Send message" title="Send message" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24">
+                <path d="m22 2-7 20-4-9-9-4Z" />
+                <path d="M22 2 11 13" />
+              </svg>
+            </button>
           </form>
         </div>
       </section>
