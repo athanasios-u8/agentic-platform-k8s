@@ -5,6 +5,8 @@ x-backend-env: &backend-env
   OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
   OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
   OLLAMA_API_KEY: ${OLLAMA_API_KEY:-ollama}
+  OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-300}
+  A2A_STREAM_TIMEOUT_SECONDS: ${A2A_STREAM_TIMEOUT_SECONDS:-300}
   TAVILY_API_KEY: ${TAVILY_API_KEY:-}
   TAVILY_SEARCH_URL: ${TAVILY_SEARCH_URL:-https://api.tavily.com/search}
   DATABASE_URL: ${DATABASE_URL:-postgresql://bookstore:bookstore@postgres:5432/bookstore}
@@ -21,7 +23,7 @@ x-backend-env: &backend-env
   APPROVAL_REQUIRED_FOR_WRITES: ${APPROVAL_REQUIRED_FOR_WRITES:-true}
   APPROVAL_STATE_STORE: ${APPROVAL_STATE_STORE:-postgres}
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
-  OBSERVABILITY_ENABLED: ${OBSERVABILITY_ENABLED:-true}
+  OBSERVABILITY_ENABLED: "false"
   OBSERVABILITY_CAPTURE_CONTENT: ${OBSERVABILITY_CAPTURE_CONTENT:-true}
   OBSERVABILITY_CONTENT_MAX_CHARS: ${OBSERVABILITY_CONTENT_MAX_CHARS:-6000}
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://otel-collector:4318/v1/traces}
@@ -50,8 +52,6 @@ services:
 
   ollama:
     image: ollama/ollama:${OLLAMA_IMAGE_TAG:-latest}
-    profiles:
-      - local-llm
     ports:
       - "${OLLAMA_HOST_PORT:-11434}:11434"
     volumes:
@@ -64,8 +64,6 @@ services:
 
   ollama-pull:
     image: ollama/ollama:${OLLAMA_IMAGE_TAG:-latest}
-    profiles:
-      - local-llm
     environment:
       OLLAMA_HOST: http://ollama:11434
     depends_on:
@@ -148,8 +146,6 @@ services:
 
   upcoming-releases-mcp:
     image: ${BACKEND_IMAGE_PREFIX:-bookstore}/upcoming-releases-mcp:${IMAGE_TAG:-local}
-    profiles:
-      - local-llm
     build:
       <<: *backend-build
       args:
@@ -226,8 +222,6 @@ services:
 
   release-scout-agent:
     image: ${BACKEND_IMAGE_PREFIX:-bookstore}/release-scout-agent:${IMAGE_TAG:-local}
-    profiles:
-      - local-llm
     build:
       <<: *backend-build
       args:
@@ -342,42 +336,6 @@ services:
     ports:
       - "${FRONTEND_HOST_PORT:-3000}:80"
 
-  tempo:
-    image: grafana/tempo:2.8.1
-    user: "0:0"
-    command: ["-config.file=/etc/tempo/tempo.yaml"]
-    ports:
-      - "${TEMPO_HOST_PORT:-3200}:3200"
-    volumes:
-      - ./docker/tempo.yaml:/etc/tempo/tempo.yaml:ro
-      - tempo-data:/tmp/tempo
-
-  grafana:
-    image: grafana/grafana:12.0.0
-    environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-    depends_on:
-      - tempo
-    ports:
-      - "${GRAFANA_HOST_PORT:-3001}:3000"
-    volumes:
-      - ./docker/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
-
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.123.0
-    command: ["--config=/etc/otelcol/otel-collector.yaml"]
-    depends_on:
-      - tempo
-    ports:
-      - "${OTEL_COLLECTOR_GRPC_HOST_PORT:-14317}:4317"
-      - "${OTEL_COLLECTOR_HTTP_HOST_PORT:-14318}:4318"
-    volumes:
-      - ./docker:/etc/otelcol:ro
-
 volumes:
   bookstore-postgres:
   ollama:
-  tempo-data:

@@ -25,20 +25,20 @@ cp .env.example .env
 uv sync
 uv lock
 
-# Build the stack and reset demo data
-docker compose build
-docker compose up -d postgres
-docker compose run --rm bookstore-cli python -m scripts.reset_demo_data
+# Start the lighter runtime stack
+make stack-runtime
 
-# Run the default Compose stack
-docker compose up
+# Reset demo data once Postgres is healthy
+make reset-db
+
+# Or start everything, including Grafana, Tempo, OTel Collector, and Langfuse
+make stack-full
 ```
 
-The default Compose stack starts the OpenAI-backed bookstore agents, MCP
-servers, database, gateway, frontend, and local trace observability with the
-OpenTelemetry Collector, Tempo, and Grafana. Release Scout, Ollama, and the
-upcoming releases MCP server are in the optional `local-llm` profile described
-below.
+The runtime stack starts the OpenAI-backed bookstore agents, Release Scout,
+Ollama, all MCP servers, database, gateway, and frontend. The full stack adds
+local observability with the OpenTelemetry Collector, Tempo, Grafana, and
+Langfuse.
 
 If your machine already has Postgres on `5432`, set another host port in `.env`,
 for example `POSTGRES_PORT=15432`. The containers still talk to Postgres on
@@ -62,17 +62,16 @@ http://localhost:8300
 
 ## Local Llama 3.2 3B With Ollama
 
-Docker Compose includes an optional CPU-only Ollama service for local
-`llama3.2:3b` runs. No GPU flags are required. Ollama configuration uses
+Docker Compose includes a CPU-only Ollama service for local `llama3.2:3b` runs.
+No GPU flags are required. Ollama configuration uses
 `OLLAMA_*` variables so it can run alongside the OpenAI configuration in
 `OPENAI_*`.
 
-Start the local LLM stack. On first run, Compose starts Ollama, pulls the
+Start the runtime stack. On first run, Compose starts Ollama, pulls the
 configured model, and then starts Release Scout:
 
 ```bash
-# Start the optional local-LLM stack
-docker compose --profile local-llm up --build -d
+make stack-runtime
 
 # Call Ollama directly after the model is pulled
 curl http://localhost:11434/api/chat \
@@ -84,7 +83,7 @@ curl http://localhost:11434/api/chat \
   }'
 ```
 
-Configure OpenAI and Ollama independently in `.env`:
+Configure OpenAI, Ollama, and Tavily independently in `.env`:
 
 ```env
 OPENAI_MODEL=gpt-5.5
@@ -93,24 +92,29 @@ OPENAI_API_KEY=...
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_API_KEY=ollama
+OLLAMA_TIMEOUT_SECONDS=300
+A2A_STREAM_TIMEOUT_SECONDS=300
 
 TAVILY_API_KEY=tvly-...
 ```
 
 After updating `.env`, rerun the start command above.
 
-Open `http://localhost:3000` and choose `Release Scout` in the agent selector
+Open `http://localhost:3000` and choose `Release Scout` in the agent list
 to search for upcoming book releases. Existing agents continue to use the
 OpenAI settings.
 
 Ollama stores downloaded models in the `ollama` named volume. If host port
 `11434` is already occupied, set `OLLAMA_HOST_PORT` in `.env`.
+CPU inference can be slow on first prompt/model load; `OLLAMA_TIMEOUT_SECONDS`
+and `A2A_STREAM_TIMEOUT_SECONDS` keep Release Scout from surfacing that delay as
+a network failure.
 
 ## Services
 
 | Service | Default host port | Purpose |
 |---|---:|---|
-| `ollama` | 11434 | Optional CPU-only local LLM runtime for `llama3.2:3b` |
+| `ollama` | 11434 | CPU-only local LLM runtime for `llama3.2:3b` |
 | `catalog-mcp` | 8101 | Book search and recommendations |
 | `customer-mcp` | 8102 | Customer profiles and preferences |
 | `store-operations-mcp` | 8103 | Inventory, reservations, and sales |
@@ -123,9 +127,10 @@ Ollama stores downloaded models in the `ollama` named volume. If host port
 | `release-scout-agent` | 8206 | Ollama-backed upcoming release subagent |
 | `frontend-gateway` | 8300 | ChatKit gateway and approval routes |
 | `frontend` | 3000 | Browser UI |
-| `tempo` | 3200 | Local trace store queried by Grafana |
-| `grafana` | 3001 | Local trace UI with a pre-provisioned Tempo datasource |
-| `otel-collector` | 14318 / 14317 | Local OTLP HTTP / gRPC intake for traces |
+| `tempo` | 3200 | Full-stack trace store queried by Grafana |
+| `grafana` | 3001 | Full-stack trace UI with a pre-provisioned Tempo datasource |
+| `otel-collector` | 14318 / 14317 | Full-stack OTLP HTTP / gRPC intake for traces |
+| `langfuse-web` | 3002 | Full-stack local Langfuse UI |
 
 The host port can be changed with the matching `*_HOST_PORT` variable while the
 service keeps its internal container port. For example,
@@ -244,8 +249,8 @@ resources for `ModelAPI`, `MCPServer`, and `Agent` workloads, including:
 - `MCPServer/upcoming-releases` for Tavily-backed internet search
 - `Agent/release-scout` for upcoming book-release scouting
 
-Build all images, including the frontend image that contains the Release Scout
-selector and starter prompt:
+Build all images, including the frontend image that contains Release Scout,
+agent-specific prompt recommendations, and local chat history:
 
 ```bash
 make docker-build-all-images
@@ -283,6 +288,18 @@ kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 kubectl -n bookstore port-forward svc/frontend 3000:80
 ```
 
+Restart every Deployment in the `bookstore` namespace after pushing fresh
+images:
+
+```bash
+kubectl rollout restart deployment -n bookstore
+kubectl rollout status deployment -n bookstore
+```
+
+The restart recreates Pods, but image re-pulls still follow each container's
+`imagePullPolicy`; use `Always` or a new immutable image tag when you need to
+guarantee a fresh image.
+
 For clusters without KAOS CRDs, `k8s/base` provides plain Kubernetes manifests
 for the backend, MCP servers, agents, gateway, Postgres, Ollama, the model-pull
 Job, Upcoming Releases MCP server, and Release Scout agent. It does not include
@@ -291,35 +308,46 @@ Compose when you need the browser UI.
 
 ## Observability
 
-Observability is enabled by default and is OTel-first:
+Observability is disabled in the lighter runtime stack and enabled by the full
+stack overlay:
 
 ```env
-OBSERVABILITY_ENABLED=true
+OBSERVABILITY_ENABLED=false
 OBSERVABILITY_CAPTURE_CONTENT=true
 OBSERVABILITY_CONTENT_MAX_CHARS=6000
 OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://otel-collector:4318/v1/traces
 OTEL_RESOURCE_ATTRIBUTES=deployment.environment=demo,service.namespace=bookstore-agents
 ```
 
-The default Docker Compose collector exports traces to Tempo, and Grafana is
-available at `http://localhost:3001`. Add `docker-compose.langfuse.yml` to run
-the fully local OSS Langfuse path; the collector then fans out traces to both
-Tempo and Langfuse. In Kubernetes, the observability stack runs in the
+Run `make stack-full` to start the runtime services plus the OpenTelemetry
+Collector, Tempo, Grafana, and local OSS Langfuse. The collector fans out traces
+to both Tempo and Langfuse. In Kubernetes, the observability stack runs in the
 `monitoring` namespace and the app exports traces to
 `otel-collector.monitoring.svc.cluster.local`. See `COMMANDS.md#observability`
 for the grouped local startup commands, health checks, smoke trace commands,
 URLs, and the full Kubernetes apply order, including the Langfuse auth secret
 step after applying the observability overlay.
 
+The full Compose overlay is `docker-compose.observability.yml`. It adds
+`tempo`, `grafana`, `otel-collector`, `langfuse-web`, `langfuse-worker`,
+`langfuse-postgres`, `langfuse-clickhouse`, `langfuse-redis`, and
+`langfuse-minio`. MinIO exposes its S3-compatible API on host port `9090` and
+its console on `9091`.
+
 ## Browser UI
 
-The frontend has a static selector for the six built-in gateway agent keys and
-sends messages through the `frontend-gateway`. In the default Compose stack,
-Release Scout is selectable but requires the optional `local-llm` profile before
-its backing service is reachable. The active run timeline appears inline below
-each user message, so longer conversations scroll inside the conversation pane
-instead of creating a second page-level timeline. Changing the selected agent
-clears the current chat transcript.
+The frontend has a left-pane agent list for the six built-in gateway agent keys
+and sends messages through the `frontend-gateway`. In the runtime stack, Release
+Scout is selectable and backed by Ollama.
+The active run timeline appears inline below each user message, so longer
+conversations scroll inside the conversation pane instead of creating a second
+page-level timeline.
+
+Recent chats are stored in browser `localStorage` without adding backend routes,
+database tables, or infrastructure. Selecting another agent starts a fresh chat
+when the current one already has messages, or switches the empty draft chat to
+that agent. Prompt recommendations above the composer change with the selected
+agent.
 
 Pending write approvals appear in the sidebar. Approving or rejecting a card
 calls the gateway approval route and refreshes the pending approval list.

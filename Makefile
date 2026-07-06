@@ -1,8 +1,10 @@
 BACKEND_IMAGE_PREFIX ?= bookstore
 FRONTEND_IMAGE_PREFIX ?= bookstore
 IMAGE_TAG ?= local
+COMPOSE_PARALLEL_LIMIT ?= 1
 
 .PHONY: sync lock lint test build up down logs init-db seed-db reset-db frontend
+.PHONY: stack-runtime stack-full stack-down stack-logs
 .PHONY: docker-build-backend-base docker-build-catalog-mcp docker-build-customer-mcp
 .PHONY: docker-build-store-operations-mcp docker-build-upcoming-releases-mcp
 .PHONY: docker-build-customer-concierge-agent
@@ -35,6 +37,18 @@ down:
 
 logs:
 	docker compose logs -f
+
+stack-runtime:
+	COMPOSE_PARALLEL_LIMIT=$(COMPOSE_PARALLEL_LIMIT) docker compose -f docker-compose.yml up --build -d --remove-orphans
+
+stack-full:
+	COMPOSE_PARALLEL_LIMIT=$(COMPOSE_PARALLEL_LIMIT) docker compose -f docker-compose.yml -f docker-compose.observability.yml up --build -d --remove-orphans
+
+stack-down:
+	docker compose -f docker-compose.yml -f docker-compose.observability.yml down --remove-orphans
+
+stack-logs:
+	docker compose -f docker-compose.yml -f docker-compose.observability.yml logs -f
 
 init-db:
 	docker compose run --rm bookstore-cli python -m scripts.init_db

@@ -23,15 +23,20 @@ docker compose run --rm bookstore-cli python -m scripts.init_db
 docker compose run --rm bookstore-cli python -m scripts.seed_fake_data
 docker compose run --rm bookstore-cli python -m scripts.reset_demo_data
 
-# Build and run the default stack
-docker compose build
-docker compose up -d
+# Build and run the lighter runtime stack
+make stack-runtime
 
-# Follow the most useful default-stack logs
-docker compose logs -f catalog-mcp customer-concierge-agent frontend-gateway frontend otel-collector
+# Or build and run everything, including observability
+make stack-full
 
-# Stop the default stack
-docker compose down
+# Raise Compose parallelism if your Docker environment has enough headroom
+COMPOSE_PARALLEL_LIMIT=2 make stack-full
+
+# Follow full-stack logs
+make stack-logs
+
+# Stop either local stack
+make stack-down
 ```
 
 If host port `5432` is already occupied, set `POSTGRES_PORT=15432` in `.env`.
@@ -44,22 +49,25 @@ make sync
 make lock
 make lint
 make test
-make build
-make up
-make logs
-make down
+make stack-runtime
+make stack-full
+make stack-logs
+make stack-down
 make reset-db
 ```
 
+`COMPOSE_PARALLEL_LIMIT` defaults to `1` in the Makefile so image builds and
+container starts happen gently on smaller local machines.
+
 ## Local Llama 3.2 3B With Ollama
 
-Release Scout runs only when the optional `local-llm` profile is active. That
-profile starts Ollama, pulls the configured model, starts the Upcoming Releases
-MCP server, and then starts `release-scout-agent`.
+Release Scout is part of the runtime stack. On first run, Compose starts
+Ollama, pulls the configured model, starts the Upcoming Releases MCP server,
+and then starts `release-scout-agent`.
 
 ```bash
-# Start the optional local-LLM stack
-docker compose --profile local-llm up --build -d
+# Start the runtime stack
+make stack-runtime
 
 # Call Ollama directly after the model is pulled
 curl http://localhost:11434/api/chat \
@@ -73,8 +81,8 @@ curl http://localhost:11434/api/chat \
 # Follow Release Scout logs
 docker compose logs -f release-scout-agent upcoming-releases-mcp ollama
 
-# Stop the local-LLM stack
-docker compose --profile local-llm down
+# Stop the runtime stack
+make stack-down
 ```
 
 Configure OpenAI, Ollama, and Tavily independently in `.env`:
@@ -86,12 +94,14 @@ OPENAI_API_KEY=...
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_API_KEY=ollama
+OLLAMA_TIMEOUT_SECONDS=300
+A2A_STREAM_TIMEOUT_SECONDS=300
 
 TAVILY_API_KEY=tvly-...
 ```
 
-Open `http://localhost:3000` and choose `Release Scout` after the `local-llm`
-profile is running.
+Open `http://localhost:3000` and choose `Release Scout` after the runtime stack
+is running.
 
 ## Images And Kubernetes
 
@@ -135,10 +145,17 @@ kubectl -n bookstore get modelapi,mcpserver,agent
 kubectl -n bookstore get pods,svc
 kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 kubectl -n bookstore port-forward svc/frontend 3000:80
+
+# Restart every Deployment so pods are recreated and pull images as configured
+kubectl rollout restart deployment -n bookstore
+kubectl rollout status deployment -n bookstore
 ```
 
 For non-local clusters, push the images from `make docker-build-all-images` and
-update the image references in each `k8s/kaos/*` component folder.
+update the image references in each `k8s/kaos/*` component folder. A rollout
+restart recreates Pods, but image re-pulls still follow each container's
+`imagePullPolicy`; use `Always` or a new immutable image tag when you need to
+guarantee a fresh image.
 
 For plain Kubernetes without KAOS CRDs, use `k8s/base`. It deploys the backend,
 MCP servers, agents, gateway, Postgres, Ollama, the model-pull Job, Upcoming
@@ -155,16 +172,19 @@ kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 
 ## Observability
 
-Observability is enabled by default. Services emit OpenTelemetry traces to the
-local Collector. The default Compose stack sends traces to Tempo; the Langfuse
-override fans out to both Tempo and local OSS Langfuse.
+Observability is disabled in the lighter runtime stack. `make stack-full` starts
+the runtime services plus the OpenTelemetry Collector, Tempo, Grafana, and local
+OSS Langfuse; the collector fans out traces to both Tempo and Langfuse.
 
 ```bash
-# Start the app, local-llm profile, Tempo, Grafana, Collector, and local Langfuse
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm up --build -d
+# Start the app, Ollama, Tempo, Grafana, Collector, and local Langfuse
+make stack-full
+
+# Inspect all runtime and observability containers
+docker compose -f docker-compose.yml -f docker-compose.observability.yml ps
 
 # Reset demo data through the Compose CLI profile
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml \
+docker compose -f docker-compose.yml -f docker-compose.observability.yml \
   --profile cli run --rm bookstore-cli python -m scripts.reset_demo_data
 
 # Health checks
@@ -191,20 +211,21 @@ curl -fsS --get http://127.0.0.1:3200/api/search \
 curl -fsS 'http://127.0.0.1:3200/api/traces/<trace-id>'
 
 # Follow observability logs
-docker compose logs -f otel-collector tempo grafana
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml logs -f langfuse-web langfuse-worker
+docker compose -f docker-compose.yml -f docker-compose.observability.yml logs -f \
+  otel-collector tempo grafana langfuse-web langfuse-worker \
+  langfuse-clickhouse langfuse-minio langfuse-redis langfuse-postgres
 
 # Check Langfuse ClickHouse storage
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml \
-  --profile local-llm exec -T langfuse-clickhouse \
+docker compose -f docker-compose.yml -f docker-compose.observability.yml \
+  exec -T langfuse-clickhouse \
   sh -lc '
     clickhouse-client \
       --user "$CLICKHOUSE_USER" \
       --password "$CLICKHOUSE_PASSWORD" \
       --query "SELECT count() FROM traces"
   '
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml \
-  --profile local-llm exec -T langfuse-clickhouse \
+docker compose -f docker-compose.yml -f docker-compose.observability.yml \
+  exec -T langfuse-clickhouse \
   sh -lc '
     clickhouse-client \
       --user "$CLICKHOUSE_USER" \
@@ -213,7 +234,7 @@ docker compose -f docker-compose.yml -f docker-compose.langfuse.yml \
   '
 
 # Stop the local observability stack
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm down
+make stack-down
 ```
 
 Local observability URLs:
@@ -228,6 +249,7 @@ Local observability URLs:
 | Tempo readiness | `http://localhost:3200/ready` |
 | OTel Collector HTTP | `http://localhost:14318/v1/traces` |
 | OTel Collector gRPC | `localhost:14317` |
+| MinIO API | `http://localhost:9090` |
 | MinIO console | `http://localhost:9091` |
 | Ollama | `http://localhost:11434` |
 
@@ -343,7 +365,7 @@ curl -N http://localhost:8300/chat \
     "message": "Can we cancel the Theo Martin pickup for Signal from Glass Moon?"
   }'
 
-# Release Scout through the gateway; requires the local-llm profile or Kubernetes service
+# Release Scout through the gateway; requires the runtime stack or Kubernetes service
 curl -N http://localhost:8300/chat \
   -H 'Content-Type: application/json' \
   -d '{"agent":"release_scout","message":"Find upcoming cozy fantasy releases."}'

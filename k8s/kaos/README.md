@@ -63,8 +63,9 @@ Build and make the images available to your cluster first:
 make docker-build-all-images
 ```
 
-This rebuilds the browser frontend image too, which is required for the
-`Release Scout` selector option and starter prompt to appear in the UI.
+This rebuilds the browser frontend image too, which is required for the current
+agent list, prompt recommendations, and browser-local recent chat history to
+appear in the UI.
 
 For a shared cluster, push the images and update the `image:` fields in
 the relevant component folders.
