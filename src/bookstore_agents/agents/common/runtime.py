@@ -92,6 +92,7 @@ class AgentRuntime:
         tool_name: str,
         arguments: dict[str, Any],
         requires_approval: bool = False,
+        approval_summary: str | None = None,
     ) -> dict[str, Any]:
         attributes = tool_attributes(
             server=server_name,
@@ -105,7 +106,7 @@ class AgentRuntime:
                     agent_name=self.spec.name,
                     tool_name=tool_name,
                     arguments=arguments,
-                    summary=self._approval_summary(tool_name, arguments),
+                    summary=approval_summary or self._approval_summary(tool_name, arguments),
                     run_state={"agent": self.spec.slug, "server": server_name},
                 )
                 set_span_attributes(
@@ -239,6 +240,10 @@ class AgentRuntime:
                 candidates = self.catalog_repo.recommend_books(message, limit=1)
                 if candidates:
                     book_id = candidates[0]["id"]
+            book = context.get("selected_book")
+            if not book and book_id:
+                book = self.catalog_repo.get_book_details(book_id)
+            customer = self.customer_repo.get_customer(customer_id=customer_id)
             stock_args = {"book_id": book_id}
             yield {"type": "tool_call_requested", "tool": "check_stock", "arguments": stock_args}
             stock = await self._call_tool("store_operations", "check_stock", stock_args)
@@ -248,15 +253,22 @@ class AgentRuntime:
                 "customer_id": customer_id,
                 "pickup_date": context.get("pickup_date") or date.today().isoformat(),
             }
+            approval_summary = self._create_reservation_summary(arguments, book, customer)
             yield {
                 "type": "tool_call_requested",
                 "tool": "create_reservation",
                 "arguments": arguments,
             }
             result = await self._call_tool(
-                "store_operations", "create_reservation", arguments, True
+                "store_operations",
+                "create_reservation",
+                arguments,
+                True,
+                approval_summary=approval_summary,
             )
             yield {"type": "approval_required", **result["approval"]}
+            result["book"] = book
+            result["customer"] = customer
             answer = f"{result['approval']['summary']} Waiting for human approval."
             yield {"type": "final", "agent": self.spec.name, "answer": answer, "data": result}
             return
@@ -298,7 +310,9 @@ class AgentRuntime:
             reservation_context = dict(context)
             books = catalog_result.get("data", {}).get("books") or []
             if books and "book_id" not in reservation_context:
-                reservation_context["book_id"] = books[0].get("id")
+                selected_book = books[0]
+                reservation_context["book_id"] = selected_book.get("id")
+                reservation_context["selected_book"] = selected_book
             reservation_result = await self._call_subagent(
                 "reservation_specialist",
                 message,
@@ -674,6 +688,14 @@ class AgentRuntime:
         catalog = context.get("catalog") or {}
         if reservation.get("data", {}).get("approval_required"):
             approval = reservation["data"]["approval"]
+            book = reservation["data"].get("book") or self._first_catalog_book(catalog)
+            customer = reservation["data"].get("customer")
+            if book:
+                return (
+                    f"I found {self._format_book_inline(book)} and prepared a pickup "
+                    f"reservation{self._format_customer_suffix(customer)}. "
+                    "Please approve it to complete the reservation."
+                )
             return (
                 "I found a good option and prepared the reservation. "
                 f"{approval['summary']} Please approve it to complete the pickup reservation."
@@ -681,6 +703,59 @@ class AgentRuntime:
         if catalog.get("answer"):
             return catalog["answer"]
         return "Here is a concise update based on the supplied context."
+
+    def _create_reservation_summary(
+        self,
+        arguments: dict[str, Any],
+        book: dict[str, Any] | None,
+        customer: dict[str, Any] | None,
+    ) -> str:
+        if book:
+            title = book.get("title") or f"book {arguments.get('book_id')}"
+            book_part = f'"{title}"'
+            authors = book.get("authors") or []
+            if authors:
+                book_part = f"{book_part} by {', '.join(authors)}"
+        else:
+            book_part = f"book {arguments.get('book_id')}"
+
+        if customer:
+            customer_part = customer.get("name") or f"customer {arguments.get('customer_id')}"
+            customer_part = f"{customer_part} (customer {arguments.get('customer_id')})"
+        else:
+            customer_part = f"customer {arguments.get('customer_id')}"
+        return f"Create reservation for {customer_part} and {book_part}."
+
+    def _first_catalog_book(self, catalog: dict[str, Any]) -> dict[str, Any] | None:
+        books = catalog.get("data", {}).get("books") or []
+        return books[0] if books else None
+
+    def _format_book_inline(self, book: dict[str, Any]) -> str:
+        title = book.get("title") or f"book {book.get('id')}"
+        authors = book.get("authors") or []
+        author_text = f" by {', '.join(authors)}" if authors else ""
+        details: list[str] = []
+        if book.get("price") is not None:
+            details.append(f"${float(book['price']):.2f}")
+        if book.get("genre"):
+            details.append(str(book["genre"]))
+        if book.get("available_quantity") is not None:
+            details.append(f"{book['available_quantity']} available")
+        detail_text = f" ({', '.join(details)})" if details else ""
+        return f'"{title}"{author_text}{detail_text}'
+
+    def _format_customer_suffix(self, customer: dict[str, Any] | None) -> str:
+        if not customer:
+            return ""
+        name = customer.get("name")
+        customer_id = customer.get("id")
+        if name and customer_id:
+            return f" for {name} (customer {customer_id})"
+        if name:
+            return f" for {name}"
+        if customer_id:
+            return f" for customer {customer_id}"
+        return ""
 
     def _extract_genre(self, message: str) -> str | None:
         lowered = message.lower()
