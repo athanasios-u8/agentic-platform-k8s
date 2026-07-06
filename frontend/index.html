@@ -3,55 +3,64 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Bookstore Agents</title>
+    <title>Bookstore Assistant</title>
     <link rel="stylesheet" href="/src/styles.css" />
     <script src="/config.js"></script>
   </head>
   <body>
     <main class="app-shell">
-      <section class="sidebar" aria-label="Agent controls">
+      <aside class="sidebar" aria-label="Bookstore Assistant navigation">
         <div class="brand">
           <div class="brand-mark">B</div>
           <div>
-            <h1>Bookstore Agents</h1>
+            <h1>Bookstore Assistant</h1>
             <p>Local assistant console</p>
           </div>
         </div>
 
-        <label class="field-label" for="agent-select">Agent</label>
-        <select id="agent-select">
-          <option value="customer_concierge">Customer Concierge</option>
-          <option value="store_manager">Store Manager</option>
-          <option value="catalog_specialist">Catalog Specialist</option>
-          <option value="reservation_specialist">Reservation Specialist</option>
-          <option value="message_drafter">Message Drafter</option>
-          <option value="release_scout">Release Scout</option>
-        </select>
+        <button id="new-chat" class="new-chat-button" type="button">New chat</button>
 
-        <div class="starter-list">
-          <button data-prompt="Find a mystery novel under $20 for my dad and reserve it for customer 1.">Mystery pickup</button>
-          <button data-prompt="What should I pay attention to before opening today?">Opening brief</button>
-          <button data-prompt="Find three science fiction books under $25 for a first-time reader.">Sci-fi picks</button>
-          <button data-prompt="List today's pickups.">Pickup queue</button>
-          <button data-prompt="Find upcoming cozy fantasy releases.">Cozy fantasy releases</button>
-          <button data-prompt="What new books by Stephen King are coming soon?">Author releases</button>
-        </div>
+        <section class="nav-section" aria-labelledby="history-heading">
+          <div class="panel-heading">
+            <h2 id="history-heading">Chats</h2>
+          </div>
+          <div id="chat-list" class="chat-list"></div>
+        </section>
+
+        <section class="nav-section" aria-labelledby="agents-heading">
+          <div class="panel-heading">
+            <h2 id="agents-heading">Agents</h2>
+          </div>
+          <div id="agent-list" class="agent-list"></div>
+        </section>
 
         <section class="approvals">
           <div class="panel-heading">
             <h2>Approvals</h2>
-            <button id="refresh-approvals" class="icon-button" title="Refresh approvals">Refresh</button>
+            <button id="refresh-approvals" class="icon-button" type="button" title="Refresh approvals" aria-label="Refresh approvals">Refresh</button>
           </div>
           <div id="approval-list" class="approval-list"></div>
         </section>
-      </section>
+      </aside>
 
       <section class="conversation" aria-label="Conversation">
-        <div id="messages" class="messages"></div>
-        <form id="chat-form" class="composer">
-          <textarea id="message-input" rows="3" placeholder="Ask an agent"></textarea>
-          <button type="submit">Send</button>
-        </form>
+        <div id="messages" class="messages">
+          <section id="landing" class="landing" aria-live="polite">
+            <p id="landing-agent" class="landing-agent"></p>
+            <h2>Bookstore Assistant</h2>
+          </section>
+        </div>
+        <div class="composer-wrap">
+          <section class="recommendations" aria-label="Recommended prompts">
+            <button id="recommendation-prev" class="carousel-control" type="button" aria-label="Previous recommendations">&lt;</button>
+            <div id="recommendation-track" class="recommendation-track"></div>
+            <button id="recommendation-next" class="carousel-control" type="button" aria-label="Next recommendations">&gt;</button>
+          </section>
+          <form id="chat-form" class="composer">
+            <textarea id="message-input" rows="2" placeholder="Message Bookstore Assistant"></textarea>
+            <button type="submit">Send</button>
+          </form>
+        </div>
       </section>
     </main>
     <script type="module" src="/src/app.js"></script>
