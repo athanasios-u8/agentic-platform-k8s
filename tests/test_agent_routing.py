@@ -70,3 +70,44 @@ def test_pickup_match_uses_customer_and_title() -> None:
     message = 'Theo Martin is not going to pick up "Signal from Glass Moon".'
 
     assert runtime._best_pickup_match(message, [pickup]) == pickup
+
+
+def test_message_drafter_uses_catalog_details_for_reservation_approval() -> None:
+    runtime = AgentRuntime(drafter_spec())
+    message = runtime._draft_message(
+        "Draft a customer response.",
+        {
+            "catalog": {
+                "data": {
+                    "books": [
+                        {
+                            "id": 1,
+                            "title": "The Lantern Cipher",
+                            "authors": ["Mara Vale"],
+                            "genre": "Mystery",
+                            "price": 18.99,
+                            "available_quantity": 10,
+                        }
+                    ]
+                }
+            },
+            "reservation": {
+                "data": {
+                    "approval_required": True,
+                    "approval": {
+                        "summary": (
+                            'Create reservation for Maria Chen (customer 1) and '
+                            '"The Lantern Cipher" by Mara Vale.'
+                        )
+                    },
+                    "customer": {"id": 1, "name": "Maria Chen"},
+                }
+            },
+        },
+    )
+
+    assert "The Lantern Cipher" in message
+    assert "Mara Vale" in message
+    assert "$18.99" in message
+    assert "10 available" in message
+    assert "customer 1 and book 1" not in message
