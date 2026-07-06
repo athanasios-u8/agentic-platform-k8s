@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     ollama_model: str = Field(default="llama3.2:3b", alias="OLLAMA_MODEL")
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
     ollama_api_key: str = Field(default="ollama", alias="OLLAMA_API_KEY")
+    ollama_timeout_seconds: float = Field(default=300.0, alias="OLLAMA_TIMEOUT_SECONDS")
+    a2a_stream_timeout_seconds: float = Field(default=300.0, alias="A2A_STREAM_TIMEOUT_SECONDS")
 
     tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
     tavily_search_url: str = Field(

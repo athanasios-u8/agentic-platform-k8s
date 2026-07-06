@@ -49,7 +49,8 @@ class OllamaTextRuntime:
         )
         with start_span("llm.ollama.chat", attributes) as span:
             try:
-                async with httpx.AsyncClient(timeout=60) as client:
+                timeout = httpx.Timeout(self.settings.ollama_timeout_seconds, connect=10.0)
+                async with httpx.AsyncClient(timeout=timeout) as client:
                     response = await client.post(self._chat_url(), json=payload)
                     response.raise_for_status()
                 data = response.json()

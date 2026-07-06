@@ -4,12 +4,18 @@ from typing import Any
 
 import httpx
 
+from bookstore_agents.common.config import get_settings
+
 
 class A2AClient:
+    def _timeout(self) -> httpx.Timeout:
+        settings = get_settings()
+        return httpx.Timeout(settings.a2a_stream_timeout_seconds, connect=10.0)
+
     async def stream_message(
         self, url: str, message: str, context: dict[str, Any] | None = None
     ) -> AsyncIterator[dict[str, Any]]:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=self._timeout()) as client:
             async with client.stream(
                 "POST",
                 f"{url.rstrip('/')}/a2a/stream",

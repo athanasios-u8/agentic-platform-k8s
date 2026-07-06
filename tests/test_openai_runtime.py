@@ -79,6 +79,7 @@ async def test_ollama_runtime_posts_to_native_chat_api(monkeypatch):
 
     monkeypatch.setenv("OLLAMA_MODEL", "llama3.2:3b")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434/")
+    monkeypatch.setenv("OLLAMA_TIMEOUT_SECONDS", "123")
     monkeypatch.setattr(
         "bookstore_agents.agents.common.ollama_runtime.httpx.AsyncClient",
         FakeAsyncClient,
@@ -90,6 +91,8 @@ async def test_ollama_runtime_posts_to_native_chat_api(monkeypatch):
         result = await runtime.polish("Release Scout", "Instructions", "Prompt", {}, "fallback")
         assert result == "Ollama polished answer"
         assert calls["url"] == "http://ollama:11434/api/chat"
+        assert calls["timeout"].connect == 10.0
+        assert calls["timeout"].read == 123.0
         assert calls["json"]["model"] == "llama3.2:3b"
         assert calls["json"]["stream"] is False
         assert calls["json"]["messages"][0]["role"] == "user"

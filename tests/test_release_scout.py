@@ -61,6 +61,6 @@ async def test_release_scout_calls_upcoming_releases_tool_and_polishes_with_runt
 
 
 def test_frontend_includes_release_scout_agent_option() -> None:
-    html = Path("frontend/index.html").read_text()
-    assert 'value="release_scout"' in html
-    assert "Release Scout" in html
+    app_js = Path("frontend/src/app.js").read_text()
+    assert 'key: "release_scout"' in app_js
+    assert 'name: "Release Scout"' in app_js
