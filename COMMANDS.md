@@ -1,64 +1,67 @@
 # Commands
 
-## Local Setup
+Run commands from the repository root unless a command says otherwise. The
+Makefile wraps the most common local and image-build commands, while the
+explicit Docker and Kubernetes commands show the profiles, secrets, and port
+forwards used by the demo.
+
+## Local Development
 
 ```bash
+# Create local config and install/update the Python environment
 cp .env.example .env
 uv sync
 uv lock
-```
 
-## Quality Checks
-
-```bash
+# Run quality checks
 uv run ruff check .
 uv run pytest
-```
 
-## Database
-
-```bash
+# Prepare the demo database in Docker Compose
 docker compose up -d postgres
 docker compose run --rm bookstore-cli python -m scripts.init_db
 docker compose run --rm bookstore-cli python -m scripts.seed_fake_data
 docker compose run --rm bookstore-cli python -m scripts.reset_demo_data
+
+# Build and run the default stack
+docker compose build
+docker compose up -d
+
+# Follow the most useful default-stack logs
+docker compose logs -f catalog-mcp customer-concierge-agent frontend-gateway frontend otel-collector
+
+# Stop the default stack
+docker compose down
 ```
 
 If host port `5432` is already occupied, set `POSTGRES_PORT=15432` in `.env`.
 For non-Postgres host port conflicts, set the matching `*_HOST_PORT` value in
 `.env` and leave the internal `*_PORT` value unchanged.
 
-## Docker
-
 ```bash
-docker compose build
-docker compose up
-docker compose logs -f catalog-mcp
-docker compose logs -f customer-concierge-agent
-docker compose logs -f release-scout-agent
-docker compose logs -f frontend-gateway
-docker compose logs -f frontend
-docker compose logs -f otel-collector
+# Same core operations through Make
+make sync
+make lock
+make lint
+make test
+make build
+make up
+make logs
+make down
+make reset-db
 ```
-
-`release-scout-agent` runs only when the `local-llm` profile is active. The
-default Compose stack also starts local trace observability: Collector, Tempo,
-and Grafana.
 
 ## Local Llama 3.2 3B With Ollama
 
-Start the optional CPU-only Ollama service. Its application settings use
-`OLLAMA_*` variables and remain separate from `OPENAI_*`.
-
-One command starts Ollama, pulls the configured model, and runs the local stack:
-
-```bash
-docker compose --profile local-llm up --build
-```
-
-After the model is pulled, you can call Ollama locally:
+Release Scout runs only when the optional `local-llm` profile is active. That
+profile starts Ollama, pulls the configured model, starts the Upcoming Releases
+MCP server, and then starts `release-scout-agent`.
 
 ```bash
+# Start the optional local-LLM stack
+docker compose --profile local-llm up --build -d
+
+# Call Ollama directly after the model is pulled
 curl http://localhost:11434/api/chat \
   -H 'Content-Type: application/json' \
   -d '{
@@ -66,9 +69,15 @@ curl http://localhost:11434/api/chat \
     "messages": [{"role": "user", "content": "Hello from the bookstore stack"}],
     "stream": false
   }'
+
+# Follow Release Scout logs
+docker compose logs -f release-scout-agent upcoming-releases-mcp ollama
+
+# Stop the local-LLM stack
+docker compose --profile local-llm down
 ```
 
-Configure OpenAI and Ollama independently in `.env`:
+Configure OpenAI, Ollama, and Tavily independently in `.env`:
 
 ```env
 OPENAI_MODEL=gpt-5.5
@@ -81,69 +90,67 @@ OLLAMA_API_KEY=ollama
 TAVILY_API_KEY=tvly-...
 ```
 
-After updating `.env`, start the stack with the same command:
+Open `http://localhost:3000` and choose `Release Scout` after the `local-llm`
+profile is running.
+
+## Images And Kubernetes
 
 ```bash
-docker compose --profile local-llm up --build
-```
-
-Open `http://localhost:3000` and choose `Release Scout`.
-
-Build only the deployable agent and MCP images:
-
-```bash
+# Build deployable images
 make docker-build-agent-mcp-images
-```
-
-Build all backend images, including the generic job image and gateway:
-
-```bash
 make docker-build-backend-images
-```
-
-Build all backend images plus the browser frontend image:
-
-```bash
 make docker-build-all-images
+
+# Tag backend images for a registry
+make docker-build-backend-images \
+  BACKEND_IMAGE_PREFIX=ghcr.io/your-org/bookstore \
+  IMAGE_TAG=0.1.0
+
+# Tag every backend and frontend image for a registry
+make docker-build-all-images \
+  BACKEND_IMAGE_PREFIX=ghcr.io/your-org/bookstore \
+  FRONTEND_IMAGE_PREFIX=ghcr.io/your-org/bookstore \
+  IMAGE_TAG=0.1.0
 ```
 
-Tag images for a registry:
+For KAOS, put `OPENAI_API_KEY` and `TAVILY_API_KEY` in the environment or in
+`.LOCAL_KEYS`. The checked-in `k8s/kaos/secrets.yaml` intentionally contains
+placeholders.
 
 ```bash
-make docker-build-backend-images BACKEND_IMAGE_PREFIX=ghcr.io/your-org/bookstore IMAGE_TAG=0.1.0
-```
-
-## Kubernetes
-
-Use the KAOS deployment for the current full stack, including Release Scout,
-Tavily search, and hosted Ollama:
-
-```bash
+# Inspect or apply the real bookstore secret
+bash deploy-secret.sh --dry-run
 bash deploy-secret.sh
+
+# One-shot KAOS apply from the repo root
+bash deploy-resources.sh
+
+# Manual KAOS apply while preserving the real secret
 kubectl kustomize k8s/kaos \
   | yq 'select(.kind != "Secret" or .metadata.name != "bookstore-secrets")' \
   | kubectl apply -f -
+
+# Check KAOS resources and browser-facing services
 kubectl -n bookstore get modelapi,mcpserver,agent
 kubectl -n bookstore get pods,svc
 kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 kubectl -n bookstore port-forward svc/frontend 3000:80
 ```
 
-`deploy-secret.sh` reads `OPENAI_API_KEY` and `TAVILY_API_KEY` from the
-environment or `.LOCAL_KEYS`. The filtered apply avoids replacing that real
-secret with the placeholders in `k8s/kaos/secrets.yaml`.
-
 For non-local clusters, push the images from `make docker-build-all-images` and
 update the image references in each `k8s/kaos/*` component folder.
 
-For plain Kubernetes without KAOS CRDs, use `k8s/base`. It keeps OpenAI
-external, and deploys Ollama, the model-pull Job, Upcoming Releases MCP, and
-Release Scout as regular Kubernetes resources:
+For plain Kubernetes without KAOS CRDs, use `k8s/base`. It deploys the backend,
+MCP servers, agents, gateway, Postgres, Ollama, the model-pull Job, Upcoming
+Releases MCP, and Release Scout as regular Kubernetes resources. It does not
+include a plain Kubernetes browser frontend manifest.
 
 ```bash
+# Apply and inspect the plain Kubernetes stack
 kubectl apply -k k8s/base
 kubectl -n bookstore get deploy,svc,pvc,job
 kubectl -n bookstore logs job/ollama-pull-llama3-2-3b
+kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 ```
 
 ## Observability
@@ -152,18 +159,64 @@ Observability is enabled by default. Services emit OpenTelemetry traces to the
 local Collector. The default Compose stack sends traces to Tempo; the Langfuse
 override fans out to both Tempo and local OSS Langfuse.
 
-### Local Startup
-
 ```bash
+# Start the app, local-llm profile, Tempo, Grafana, Collector, and local Langfuse
 docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm up --build -d
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile cli run --rm bookstore-cli python -m scripts.reset_demo_data
+
+# Reset demo data through the Compose CLI profile
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml \
+  --profile cli run --rm bookstore-cli python -m scripts.reset_demo_data
+
+# Health checks
+curl -fsS http://127.0.0.1:8300/healthz
+curl -fsS http://127.0.0.1:8300/readyz
+curl -fsS http://127.0.0.1:8300/agents
+curl -fsS http://127.0.0.1:3001/api/health
+curl -fsS http://127.0.0.1:3200/ready
+curl -fsSI http://127.0.0.1:3002
+
+# Smoke a trace through gateway, agent, and MCP server
+curl -N --max-time 120 http://127.0.0.1:8300/chat \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "agent": "catalog_specialist",
+    "message": "Recommend one mystery book under $20. Keep the answer brief.",
+    "context": {"session_id": "local-observability-smoke"}
+  }'
+
+# Search Tempo for the named workflow span and inspect a specific trace
+curl -fsS --get http://127.0.0.1:3200/api/search \
+  --data-urlencode 'q={name="frontend.chat"}' \
+  --data-urlencode limit=50
+curl -fsS 'http://127.0.0.1:3200/api/traces/<trace-id>'
+
+# Follow observability logs
+docker compose logs -f otel-collector tempo grafana
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml logs -f langfuse-web langfuse-worker
+
+# Check Langfuse ClickHouse storage
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml \
+  --profile local-llm exec -T langfuse-clickhouse \
+  sh -lc '
+    clickhouse-client \
+      --user "$CLICKHOUSE_USER" \
+      --password "$CLICKHOUSE_PASSWORD" \
+      --query "SELECT count() FROM traces"
+  '
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml \
+  --profile local-llm exec -T langfuse-clickhouse \
+  sh -lc '
+    clickhouse-client \
+      --user "$CLICKHOUSE_USER" \
+      --password "$CLICKHOUSE_PASSWORD" \
+      --query "SELECT count() FROM observations"
+  '
+
+# Stop the local observability stack
+docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm down
 ```
 
-This starts the bookstore app, the `local-llm` profile, Tempo, Grafana, the
-OpenTelemetry Collector, local Langfuse Web/Worker, Langfuse Postgres,
-ClickHouse, Redis, and MinIO. It does not use Langfuse Cloud.
-
-### Local URLs
+Local observability URLs:
 
 | Surface | URL |
 |---|---|
@@ -185,99 +238,40 @@ demo@bookstore.local
 bookstore-demo
 ```
 
-### Health Checks
-
-```bash
-curl -fsS http://127.0.0.1:8300/healthz
-curl -fsS http://127.0.0.1:8300/agents
-curl -fsS http://127.0.0.1:3001/api/health
-curl -fsS http://127.0.0.1:3200/ready
-curl -fsSI http://127.0.0.1:3002
-```
-
-### Smoke Trace
-
-```bash
-curl -N --max-time 120 http://127.0.0.1:8300/chat \
-  -H 'Content-Type: application/json' \
-  -d '{"agent":"catalog_specialist","message":"Recommend one mystery book under $20. Keep the answer brief.","context":{"session_id":"local-observability-smoke"}}'
-```
-
-Search Tempo for the named workflow span:
-
-```bash
-curl -fsS --get http://127.0.0.1:3200/api/search \
-  --data-urlencode 'q={name="frontend.chat"}' \
-  --data-urlencode limit=50
-```
-
-```bash
-curl -fsS 'http://127.0.0.1:3200/api/traces/<trace-id>'
-```
-
-In a healthy smoke run, Tempo shows one `POST /chat` trace spanning
-`frontend-gateway`, `catalog-specialist-agent`, and `catalog-mcp`. Langfuse
-shows the same workflow with prompt, output, tool, and generation observations.
-
-### Logs And Storage Checks
-
-```bash
-docker compose logs -f otel-collector
-docker compose logs -f tempo
-docker compose logs -f grafana
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml logs -f langfuse-web
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml logs -f langfuse-worker
-```
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm exec -T langfuse-clickhouse sh -lc 'clickhouse-client --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --query "SELECT count() FROM traces"'
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm exec -T langfuse-clickhouse sh -lc 'clickhouse-client --user "$CLICKHOUSE_USER" --password "$CLICKHOUSE_PASSWORD" --query "SELECT count() FROM observations"'
-```
-
-### Stop
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.langfuse.yml --profile local-llm down
-```
-
-### Kubernetes
-
-Observability runs in the `monitoring` namespace. The bookstore app remains in
-`bookstore`, but `bookstore-config` points app traces to
+Observability runs in the Kubernetes `monitoring` namespace. The bookstore app
+remains in `bookstore`, but `bookstore-config` points app traces to
 `http://otel-collector.monitoring.svc.cluster.local:4318/v1/traces`.
 
-Use this full order for the KAOS deployment:
-
 ```bash
+# Install self-hosted Langfuse and apply the KAOS plus observability overlay
 helm repo add langfuse https://langfuse.github.io/langfuse-k8s
 helm repo update
-
 helm upgrade --install langfuse langfuse/langfuse \
   --namespace monitoring \
   --create-namespace \
   -f k8s/observability/langfuse-values.yaml
-
 kubectl apply -k k8s/kaos-observability
 
+# Restore the real Langfuse auth string after the placeholder secret is applied
 export LANGFUSE_AUTH_STRING="$(grep '^LANGFUSE_AUTH_STRING=' .env | cut -d= -f2-)"
-
 kubectl -n monitoring create secret generic bookstore-observability-secrets \
   --from-literal=LANGFUSE_AUTH_STRING="${LANGFUSE_AUTH_STRING}" \
   --dry-run=client -o yaml | kubectl apply -f -
-
 kubectl -n monitoring rollout restart deploy/otel-collector
+
+# Use one of these narrower overlays when you do not want the KAOS app overlay
+kubectl apply -k k8s/base-observability
+kubectl apply -k k8s/observability
+
+# Port-forward the local Kubernetes UIs
+kubectl -n monitoring port-forward svc/grafana 3001:3000
+kubectl -n monitoring port-forward svc/langfuse-web 3002:3000
 ```
 
-The order matters:
-
-- The Helm command installs self-hosted Langfuse in `monitoring`.
-- The overlay applies the bookstore app, Tempo, Grafana, Collector, and the
-  cross-namespace OTLP endpoint.
-- The overlay also applies `k8s/observability/secrets.yaml`, which is only a
-  placeholder with an empty `LANGFUSE_AUTH_STRING`.
-- Reapplying the secret after the overlay restores the real Langfuse auth value.
-- The Collector reads `LANGFUSE_AUTH_STRING` as an environment variable, so it
-  needs a rollout restart after the secret changes.
+The order matters: Helm installs self-hosted Langfuse, the overlay applies the
+bookstore app, Tempo, Grafana, Collector, and placeholder observability secret,
+and the final secret plus rollout restart restores the real `LANGFUSE_AUTH_STRING`
+used by the Collector.
 
 If `.env` does not already contain `LANGFUSE_AUTH_STRING`, create it from the
 Langfuse project public and secret keys:
@@ -286,89 +280,79 @@ Langfuse project public and secret keys:
 LANGFUSE_AUTH_STRING="$(printf 'pk-lf-...:sk-lf-...' | base64 | tr -d '\n')"
 ```
 
-For plain Kubernetes without KAOS CRDs, replace the overlay command with:
-
-```bash
-kubectl apply -k k8s/base-observability
-```
-
-If you only want the monitoring stack without applying any app resources, use:
-
-```bash
-kubectl apply -k k8s/observability
-```
-
-```bash
-kubectl -n monitoring port-forward svc/grafana 3001:3000
-kubectl -n monitoring port-forward svc/langfuse-web 3002:3000
-```
-
 ## Local Services Without Docker
 
+These commands run the Python services directly. Start Postgres first and set
+`DATABASE_URL`, MCP URLs, agent URLs, and provider keys as needed.
+
 ```bash
+# MCP servers
 uv run python -m bookstore_agents.mcp_servers.catalog.server
 uv run python -m bookstore_agents.mcp_servers.customer.server
 uv run python -m bookstore_agents.mcp_servers.store_operations.server
 uv run python -m bookstore_agents.mcp_servers.upcoming_releases.server
+
+# Agent servers
 uv run python -m bookstore_agents.agents.customer_concierge.server
 uv run python -m bookstore_agents.agents.store_manager.server
 uv run python -m bookstore_agents.agents.catalog_specialist.server
 uv run python -m bookstore_agents.agents.reservation_specialist.server
 uv run python -m bookstore_agents.agents.message_drafter.server
 uv run python -m bookstore_agents.agents.release_scout.server
+
+# Frontend gateway
 uv run python -m bookstore_agents.frontend_gateway.server
 ```
 
-## Agent Calls
+## API Smoke Calls
 
-Call an agent directly:
+MCP servers expose `/healthz`, `/readyz`, and the FastMCP app mounted at `/mcp`.
+Agent servers expose health checks, A2A routes, KAOS-compatible agent cards, and
+an OpenAI-compatible chat-completions route. The gateway exposes browser chat,
+ChatKit-style streaming, agent discovery, and approvals.
 
 ```bash
+# Gateway health and discovery
+curl -fsS http://localhost:8300/healthz
+curl -fsS http://localhost:8300/readyz
+curl -fsS http://localhost:8300/agents
+
+# Agent health, cards, A2A JSON-RPC, A2A stream, and chat completions
+curl -fsS http://localhost:8201/healthz
+curl -fsS http://localhost:8201/.well-known/agent-card.json
+curl -fsS http://localhost:8201/.well-known/agent.json
+curl -fsS http://localhost:8201/a2a \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Find a mystery novel under $20."}'
 curl -N http://localhost:8201/a2a/stream \
   -H 'Content-Type: application/json' \
   -d '{"message":"Find a mystery novel under $20 and reserve it for customer 1."}'
-```
-
-Call the staff-facing master agent:
-
-```bash
-curl -N http://localhost:8202/a2a/stream \
+curl -N http://localhost:8201/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -d '{"message":"What should I pay attention to before opening today?"}'
-```
+  -d '{
+    "model": "customer-concierge",
+    "messages": [{"role": "user", "content": "Find a mystery novel under $20."}],
+    "stream": true
+  }'
 
-Call through the frontend gateway, using the same path as the browser UI:
-
-```bash
+# Gateway chat, using the same path as the browser UI
 curl -N http://localhost:8300/chat \
   -H 'Content-Type: application/json' \
-  -d '{"agent":"store_manager","message":"Theo Martin called and is not going to pick up Signal from Glass Moon. Can we update the system accordingly?"}'
-```
+  -d '{
+    "agent": "store_manager",
+    "message": "Can we cancel the Theo Martin pickup for Signal from Glass Moon?"
+  }'
 
-Call Release Scout through the frontend gateway:
-
-```bash
+# Release Scout through the gateway; requires the local-llm profile or Kubernetes service
 curl -N http://localhost:8300/chat \
   -H 'Content-Type: application/json' \
   -d '{"agent":"release_scout","message":"Find upcoming cozy fantasy releases."}'
-```
 
-List pending approvals:
-
-```bash
-curl http://localhost:8300/approvals
-```
-
-Approve a pending write:
-
-```bash
-curl http://localhost:8300/approvals/<approval_id>/approve -X POST
-```
-
-Reject a pending write:
-
-```bash
-curl http://localhost:8300/approvals/<approval_id>/reject -X POST
+# Approval inspection and resolution
+curl -fsS http://localhost:8300/approvals
+curl -fsS http://localhost:8300/approvals/<approval_id>
+curl -fsS http://localhost:8300/approvals/<approval_id>/approve -X POST
+curl -fsS http://localhost:8300/approvals/<approval_id>/reject -X POST
 ```
 
 After approving a cancellation or pickup completion, ask the Store Manager for

@@ -20,12 +20,17 @@ Useful supporting docs:
 ## Quick Start
 
 ```bash
+# Create local config and install dependencies
 cp .env.example .env
 uv sync
 uv lock
+
+# Build the stack and reset demo data
 docker compose build
 docker compose up -d postgres
 docker compose run --rm bookstore-cli python -m scripts.reset_demo_data
+
+# Run the default Compose stack
 docker compose up
 ```
 
@@ -66,12 +71,10 @@ Start the local LLM stack. On first run, Compose starts Ollama, pulls the
 configured model, and then starts Release Scout:
 
 ```bash
-docker compose --profile local-llm up --build
-```
+# Start the optional local-LLM stack
+docker compose --profile local-llm up --build -d
 
-Call it locally:
-
-```bash
+# Call Ollama directly after the model is pulled
 curl http://localhost:11434/api/chat \
   -H 'Content-Type: application/json' \
   -d '{
@@ -94,11 +97,7 @@ OLLAMA_API_KEY=ollama
 TAVILY_API_KEY=tvly-...
 ```
 
-After updating `.env`, start the stack with the same command:
-
-```bash
-docker compose --profile local-llm up --build
-```
+After updating `.env`, rerun the start command above.
 
 Open `http://localhost:3000` and choose `Release Scout` in the agent selector
 to search for upcoming book releases. Existing agents continue to use the
@@ -132,6 +131,19 @@ The host port can be changed with the matching `*_HOST_PORT` variable while the
 service keeps its internal container port. For example,
 `CATALOG_MCP_HOST_PORT=18101` publishes the Catalog MCP server on host port
 `18101` while other containers still reach it at `catalog-mcp:8101`.
+
+## HTTP Surfaces
+
+All Python HTTP services expose `GET /healthz` and `GET /readyz`.
+
+- MCP servers mount FastMCP at `/mcp`.
+- Agent servers expose `GET /.well-known/agent-card.json`,
+  `GET /.well-known/agent.json`, `POST /a2a`, `POST /a2a/stream`, and
+  `POST /v1/chat/completions`.
+- The frontend gateway exposes `GET /agents`, `POST /chat`, `POST /chatkit`,
+  `GET /approvals`, `GET /approvals/{approval_id}`,
+  `POST /approvals/{approval_id}/approve`, and
+  `POST /approvals/{approval_id}/reject`.
 
 ## Architecture
 
@@ -187,6 +199,20 @@ flowchart LR
   Upcoming --> Tavily
 ```
 
+## Data Model
+
+The demo schema is initialized by `scripts/init_db.py` and seeded by
+`scripts/seed_fake_data.py`.
+
+| Table | Purpose |
+|---|---|
+| `authors`, `books`, `book_authors` | Catalog metadata, genre, audience, price, popularity, and author links. |
+| `inventory` | Current on-hand and reserved quantities plus shelf location for each book. |
+| `customers`, `customer_preferences` | Customer profile, loyalty tier, and reading preferences. |
+| `approvals` | Pending, approved, and rejected write proposals emitted by agents. |
+| `reservations` | Reservation status and pickup date, with approved writes linked to `approvals.approval_id`. |
+| `sales` | Quantity, customer, price, and date records used by store-operation summaries. |
+
 ## Container Images
 
 The backend services use one reusable Python Dockerfile. Each agent and MCP
@@ -233,6 +259,13 @@ the real secret with:
 bash deploy-secret.sh
 ```
 
+From the repository root, `deploy-resources.sh` applies the KAOS components in
+dependency order and calls `deploy-secret.sh` for the real secret:
+
+```bash
+bash deploy-resources.sh
+```
+
 Apply the rest of the KAOS stack without overwriting the real secret:
 
 ```bash
@@ -250,10 +283,11 @@ kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 kubectl -n bookstore port-forward svc/frontend 3000:80
 ```
 
-For clusters without KAOS CRDs, `k8s/base` provides plain Kubernetes
-Deployment/Service manifests. It keeps OpenAI external through
-`OPENAI_API_KEY`, and includes an in-cluster Ollama runtime, model-pull Job,
-Upcoming Releases MCP server, and Release Scout agent.
+For clusters without KAOS CRDs, `k8s/base` provides plain Kubernetes manifests
+for the backend, MCP servers, agents, gateway, Postgres, Ollama, the model-pull
+Job, Upcoming Releases MCP server, and Release Scout agent. It does not include
+a plain Kubernetes browser frontend manifest; use the KAOS overlay or Docker
+Compose when you need the browser UI.
 
 ## Observability
 
@@ -279,11 +313,13 @@ step after applying the observability overlay.
 
 ## Browser UI
 
-The frontend lets you select any of the six agents and send messages through
-the `frontend-gateway`. The active run timeline appears inline below each user
-message, so longer conversations scroll inside the conversation pane instead of
-creating a second page-level timeline. Changing the selected agent clears the
-current chat transcript.
+The frontend has a static selector for the six built-in gateway agent keys and
+sends messages through the `frontend-gateway`. In the default Compose stack,
+Release Scout is selectable but requires the optional `local-llm` profile before
+its backing service is reachable. The active run timeline appears inline below
+each user message, so longer conversations scroll inside the conversation pane
+instead of creating a second page-level timeline. Changing the selected agent
+clears the current chat transcript.
 
 Pending write approvals appear in the sidebar. Approving or rejecting a card
 calls the gateway approval route and refreshes the pending approval list.

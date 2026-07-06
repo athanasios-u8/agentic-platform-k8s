@@ -87,6 +87,15 @@ Then create or update the real Kubernetes secret:
 bash deploy-secret.sh
 ```
 
+From the repository root, you can apply the KAOS resources in dependency order
+with the helper script. It applies namespace/config resources, calls
+`deploy-secret.sh`, then applies Postgres, model APIs, MCP servers, agents,
+gateway, and frontend resources:
+
+```bash
+bash deploy-resources.sh
+```
+
 When applying the full KAOS kustomization, skip `secrets.yaml` so the
 placeholder values do not overwrite the real secret:
 
