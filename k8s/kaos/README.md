@@ -63,10 +63,15 @@ service port `11434`.
 
 ## Apply
 
-Build and make the images available to your cluster first:
+Build and make the images available to your cluster first, then use the helper
+script from the repository root:
 
 ```bash
+# Build all backend, agent, MCP, gateway, and frontend images
 make docker-build-all-images
+
+# Apply the KAOS stack in dependency order
+bash deploy-resources.sh
 ```
 
 This rebuilds the browser frontend image too, which is required for the current
@@ -96,36 +101,56 @@ export AZURE_AI_SEARCH_ADMIN_KEY=...
 export AZURE_AI_SEARCH_QUERY_KEY=...
 ```
 
-Then create or update the real Kubernetes secret:
+`deploy-resources.sh` sources `.LOCAL_KEYS`, calls `deploy-secret.sh`, and then
+applies namespace/config resources, Postgres, model APIs, MCP servers, subagents,
+master agents, gateway, and frontend resources.
+
+To create or update only the real Kubernetes secret:
 
 ```bash
 bash deploy-secret.sh
 ```
 
-From the repository root, you can apply the KAOS resources in dependency order
-with the helper script. It applies namespace/config resources, calls
-`deploy-secret.sh`, then applies Postgres, model APIs, MCP servers, agents,
-gateway, and frontend resources:
+Manual apply, preserving the real secret:
 
 ```bash
-bash deploy-resources.sh
-```
+# Shared namespace, config, and real secret
+kubectl apply -f k8s/kaos/namespace.yaml
+kubectl apply -f k8s/kaos/configmap.yaml
+bash deploy-secret.sh
 
-When applying the full KAOS kustomization, skip `secrets.yaml` so the
-placeholder values do not overwrite the real secret:
+# Data and model APIs
+kubectl apply -k k8s/kaos/postgres
+kubectl apply -k k8s/kaos/reset-demo-data
+kubectl apply -k k8s/kaos/openai-modelapi
+kubectl apply -k k8s/kaos/llama3-2-3b-modelapi
 
-```bash
-kubectl kustomize k8s/kaos \
-  | yq 'select(.kind != "Secret" or .metadata.name != "bookstore-secrets")' \
-  | kubectl apply -f -
-```
+# MCP servers
+kubectl apply -k k8s/kaos/catalog-mcp
+kubectl apply -k k8s/kaos/customer-mcp
+kubectl apply -k k8s/kaos/store-operations-mcp
+kubectl apply -k k8s/kaos/upcoming-releases-mcp
 
-Useful checks:
+# Subagents before master/coordinator agents
+kubectl apply -k k8s/kaos/catalog-specialist-agent
+kubectl apply -k k8s/kaos/reservation-specialist-agent
+kubectl apply -k k8s/kaos/message-drafter-agent
+kubectl apply -k k8s/kaos/release-scout-agent
+kubectl apply -k k8s/kaos/review-summarizer-agent
+kubectl apply -k k8s/kaos/customer-concierge-agent
+kubectl apply -k k8s/kaos/store-manager-agent
 
-```bash
+# Browser-facing services
+kubectl apply -k k8s/kaos/frontend-gateway
+kubectl apply -k k8s/kaos/frontend
+
+# Inspect the result
 kubectl -n bookstore get modelapi,mcpserver,agent
 kubectl -n bookstore get deploy,svc
 ```
+
+Do not apply `k8s/kaos/secrets.yaml` over a real cluster secret; it contains
+placeholder values by design.
 
 KAOS will create workload services named:
 
@@ -150,7 +175,8 @@ false`. This prevents Kubernetes service-link environment variables such as
 `FRONTEND_GATEWAY_PORT=tcp://...` from overriding integer application settings
 inside the Python containers.
 
-For local browser testing, port-forward both browser-facing services:
+For local browser testing, port-forward both browser-facing services in separate
+terminals:
 
 ```bash
 kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300

@@ -222,6 +222,8 @@ flowchart LR
   Search["Azure AI Search\nsrch-index-bookstore-dev"]
   JSONL["Local review JSONL\nignored generated artifact"]
   OpenAI["OpenAI\nreview generation + summarization"]
+  Config["runtime config\n.env / bookstore-config"]
+  Secrets["runtime secrets\n.env / bookstore-secrets"]
 
   CC --> Catalog
   CC --> Customer
@@ -234,6 +236,8 @@ flowchart LR
   Reviews --> DB
   Reviews --> Search
   Reviews --> OpenAI
+  Config -.-> Reviews
+  Secrets -.-> Reviews
   Scout --> Upcoming
   Scout --> Ollama
 
@@ -328,22 +332,42 @@ sequenceDiagram
 
 ## Review Data And Azure AI Search Setup
 
-Review data is configured outside Kubernetes in this first round. The generated JSONL file is local and ignored by Git; Azure AI Search credentials remain in `.env`.
+Review data is generated locally from seeded Postgres catalog rows and uploaded
+to Azure AI Search. The generated JSONL file is local and ignored by Git. In
+Docker Compose and direct local runs, Azure AI Search values come from `.env`.
+In Kubernetes, `deploy-secret.sh` writes `AZURE_AI_SEARCH_ENDPOINT` plus the
+Azure AI Search keys into `bookstore-secrets`, while `bookstore-config` provides
+`AZURE_AI_SEARCH_INDEX_NAME` and `BOOK_REVIEW_SEARCH_TOP_K`.
 
 ```bash
-# Reset Postgres demo data before generating reviews
+# Local review index preparation
 make reset-db
-
-# Generate reviews, create/update srch-index-bookstore-dev, and upload documents
 docker compose run --rm bookstore-cli bookstore-ai-search rebuild
 
-# Or run each step separately
+# Or run each Azure AI Search step separately
 docker compose run --rm bookstore-cli bookstore-ai-search generate-reviews
 docker compose run --rm bookstore-cli bookstore-ai-search create-index
 docker compose run --rm bookstore-cli bookstore-ai-search upload-reviews
 ```
 
 The index stores whole review paragraphs with searchable title, headline, author, genre, and review text fields. Metadata fields such as `book_title_normalized`, `book_id`, `isbn`, `genre`, `sentiment`, and `rating` are filterable or sortable as needed. No chunking or vector fields are used for reviews.
+
+For Kubernetes deployments, create `.LOCAL_KEYS` with the secret values and use
+the deployment helper so config, secrets, model APIs, and the review summarizer
+agent are applied in dependency order:
+
+```bash
+export DATABASE_URL=postgresql://bookstore:bookstore@postgres:5432/bookstore
+export POSTGRES_PASSWORD=...
+export AZURE_AI_SEARCH_ENDPOINT=...
+export OPENAI_API_KEY=...
+export TAVILY_API_KEY=...
+export AZURE_AI_SEARCH_ADMIN_KEY=...
+export AZURE_AI_SEARCH_QUERY_KEY=...
+
+make docker-build-all-images
+bash deploy-resources.sh
+```
 
 ## Example Staff Briefing Flow
 

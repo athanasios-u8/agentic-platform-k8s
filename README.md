@@ -128,11 +128,23 @@ BOOK_REVIEW_SEARCH_TOP_K=15
 Generate and upload the review corpus after Postgres has been seeded:
 
 ```bash
+# Ensure Postgres demo data exists
+make reset-db
+
+# Generate reviews, create/update the search index, and upload documents
 docker compose run --rm bookstore-cli bookstore-ai-search rebuild
+
+# Or run the Azure AI Search steps separately
+docker compose run --rm bookstore-cli bookstore-ai-search generate-reviews
+docker compose run --rm bookstore-cli bookstore-ai-search create-index
+docker compose run --rm bookstore-cli bookstore-ai-search upload-reviews
 ```
 
 The generated JSONL file defaults to `data/book_reviews/book_reviews.jsonl` and
-is ignored by Git. Open the frontend and choose `Review Summarizer`, or ask
+is ignored by Git. In Kubernetes, `deploy-secret.sh` puts
+`AZURE_AI_SEARCH_ENDPOINT` and the Azure AI Search keys in `bookstore-secrets`;
+`AZURE_AI_SEARCH_INDEX_NAME` and `BOOK_REVIEW_SEARCH_TOP_K` stay in
+`bookstore-config`. Open the frontend and choose `Review Summarizer`, or ask
 Customer Concierge a review question such as "What do people like and dislike
 about The Lantern Cipher?"
 
@@ -200,6 +212,8 @@ flowchart LR
   Tavily["Tavily Search API"]
   Ollama["Ollama /api/chat"]
   Search["Azure AI Search\nsrch-index-bookstore-dev"]
+  Config["runtime config\n.env / bookstore-config"]
+  Secrets["runtime secrets\n.env / bookstore-secrets"]
 
   UI --> GW
   GW --> CC
@@ -230,6 +244,8 @@ flowchart LR
   Scout --> Ollama
   Reviews --> DB
   Reviews --> Search
+  Config -.-> Reviews
+  Secrets -.-> Reviews
 
   Catalog --> DB
   Customer --> DB
@@ -284,40 +300,75 @@ resources for `ModelAPI`, `MCPServer`, and `Agent` workloads, including:
 - `Agent/review-summarizer` for Azure AI Search-backed review summaries
 
 Build all images, including the frontend image that contains agent-specific
-prompt recommendations and local chat history:
+prompt recommendations and local chat history, then apply the KAOS stack with
+the helper script:
 
 ```bash
+# Build all deployable backend and frontend images
 make docker-build-all-images
-```
 
-`k8s/kaos/secrets.yaml` intentionally contains placeholders. For a local KAOS
-cluster, put `OPENAI_API_KEY`, `TAVILY_API_KEY`, and the Azure AI Search keys
-used by Review Summarizer in `.LOCAL_KEYS`, then apply the real secret with:
-
-```bash
-bash deploy-secret.sh
-```
-
-From the repository root, `deploy-resources.sh` applies the KAOS components in
-dependency order and calls `deploy-secret.sh` for the real secret:
-
-```bash
+# Apply namespace, config, real secrets, Postgres, model APIs, MCP servers,
+# agents, gateway, frontend, and status checks in dependency order
 bash deploy-resources.sh
 ```
 
-Apply the rest of the KAOS stack without overwriting the real secret:
+`k8s/kaos/secrets.yaml` intentionally contains placeholders and should not be
+used for real keys. For a local KAOS cluster, put the secret material consumed
+by `deploy-secret.sh` in `.LOCAL_KEYS`:
 
 ```bash
-kubectl kustomize k8s/kaos \
-  | yq 'select(.kind != "Secret" or .metadata.name != "bookstore-secrets")' \
-  | kubectl apply -f -
+export DATABASE_URL=postgresql://bookstore:bookstore@postgres:5432/bookstore
+export POSTGRES_PASSWORD=...
+export AZURE_AI_SEARCH_ENDPOINT=...
+export OPENAI_API_KEY=...
+export TAVILY_API_KEY=...
+export AZURE_AI_SEARCH_ADMIN_KEY=...
+export AZURE_AI_SEARCH_QUERY_KEY=...
 ```
 
-Useful checks:
+If you need to apply the KAOS resources manually, keep the shared ConfigMap and
+real Secret ahead of any workload that references them:
 
 ```bash
+# Shared namespace, config, and real secret
+kubectl apply -f k8s/kaos/namespace.yaml
+kubectl apply -f k8s/kaos/configmap.yaml
+bash deploy-secret.sh
+
+# Data and model APIs
+kubectl apply -k k8s/kaos/postgres
+kubectl apply -k k8s/kaos/reset-demo-data
+kubectl apply -k k8s/kaos/openai-modelapi
+kubectl apply -k k8s/kaos/llama3-2-3b-modelapi
+
+# MCP servers
+kubectl apply -k k8s/kaos/catalog-mcp
+kubectl apply -k k8s/kaos/customer-mcp
+kubectl apply -k k8s/kaos/store-operations-mcp
+kubectl apply -k k8s/kaos/upcoming-releases-mcp
+
+# Subagents before master/coordinator agents
+kubectl apply -k k8s/kaos/catalog-specialist-agent
+kubectl apply -k k8s/kaos/reservation-specialist-agent
+kubectl apply -k k8s/kaos/message-drafter-agent
+kubectl apply -k k8s/kaos/release-scout-agent
+kubectl apply -k k8s/kaos/review-summarizer-agent
+kubectl apply -k k8s/kaos/customer-concierge-agent
+kubectl apply -k k8s/kaos/store-manager-agent
+
+# Browser-facing services
+kubectl apply -k k8s/kaos/frontend-gateway
+kubectl apply -k k8s/kaos/frontend
+```
+
+Inspection and local port-forward commands:
+
+```bash
+# Inspect KAOS resources and generated workloads
 kubectl -n bookstore get modelapi,mcpserver,agent
 kubectl -n bookstore get pods,svc
+
+# Run these port-forwards in separate terminals when testing locally
 kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 kubectl -n bookstore port-forward svc/frontend 3000:80
 ```
@@ -326,6 +377,7 @@ Restart every Deployment in the `bookstore` namespace after pushing fresh
 images:
 
 ```bash
+# Recreate Pods so imagePullPolicy and immutable tags take effect
 kubectl rollout restart deployment -n bookstore
 kubectl rollout status deployment -n bookstore
 ```
@@ -340,9 +392,10 @@ Job, Upcoming Releases MCP server, Release Scout agent, and Review Summarizer
 agent. It does not include a plain Kubernetes browser frontend manifest; use the
 KAOS overlay or Docker Compose when you need the browser UI.
 
-Set `AZURE_AI_SEARCH_ENDPOINT` and the Azure AI Search key in
+Set `AZURE_AI_SEARCH_ENDPOINT` and at least one Azure AI Search key in
 `bookstore-secrets` before expecting Review Summarizer to retrieve live indexed
-reviews.
+reviews. Review Summarizer also needs `bookstore-config` because the Agent
+references `AZURE_AI_SEARCH_INDEX_NAME` and `BOOK_REVIEW_SEARCH_TOP_K`.
 
 ## Observability
 

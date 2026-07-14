@@ -123,32 +123,15 @@ make docker-build-all-images \
   IMAGE_TAG=0.1.0
 ```
 
-For KAOS, put `OPENAI_API_KEY`, `TAVILY_API_KEY`, and the Azure AI Search keys
-used by Review Summarizer in the environment or in `.LOCAL_KEYS`. The checked-in
-`k8s/kaos/secrets.yaml` intentionally contains placeholders.
+For KAOS, put `OPENAI_API_KEY`, `TAVILY_API_KEY`,
+`AZURE_AI_SEARCH_ENDPOINT`, and at least one Azure AI Search key in the
+environment or in `.LOCAL_KEYS`. The checked-in `k8s/kaos/secrets.yaml`
+intentionally contains placeholders.
 
 ```bash
-# Inspect or apply the real bookstore secret
-bash deploy-secret.sh --dry-run
-bash deploy-secret.sh
-
-# One-shot KAOS apply from the repo root
+# Recommended one-shot KAOS apply from the repo root.
+# This calls deploy-secret.sh and applies resources in dependency order.
 bash deploy-resources.sh
-
-# Manual KAOS apply while preserving the real secret
-kubectl kustomize k8s/kaos \
-  | yq 'select(.kind != "Secret" or .metadata.name != "bookstore-secrets")' \
-  | kubectl apply -f -
-
-# Check KAOS resources and browser-facing services
-kubectl -n bookstore get modelapi,mcpserver,agent
-kubectl -n bookstore get pods,svc
-kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
-kubectl -n bookstore port-forward svc/frontend 3000:80
-
-# Restart every Deployment so pods are recreated and pull images as configured
-kubectl rollout restart deployment -n bookstore
-kubectl rollout status deployment -n bookstore
 ```
 
 For non-local clusters, push the images from `make docker-build-all-images` and
@@ -157,20 +140,73 @@ restart recreates Pods, but image re-pulls still follow each container's
 `imagePullPolicy`; use `Always` or a new immutable image tag when you need to
 guarantee a fresh image.
 
+Manual KAOS apply, preserving the real secret:
+
+```bash
+# Shared namespace, config, and real secret
+kubectl apply -f k8s/kaos/namespace.yaml
+kubectl apply -f k8s/kaos/configmap.yaml
+bash deploy-secret.sh
+
+# Data and model APIs
+kubectl apply -k k8s/kaos/postgres
+kubectl apply -k k8s/kaos/reset-demo-data
+kubectl apply -k k8s/kaos/openai-modelapi
+kubectl apply -k k8s/kaos/llama3-2-3b-modelapi
+
+# MCP servers
+kubectl apply -k k8s/kaos/catalog-mcp
+kubectl apply -k k8s/kaos/customer-mcp
+kubectl apply -k k8s/kaos/store-operations-mcp
+kubectl apply -k k8s/kaos/upcoming-releases-mcp
+
+# Subagents before master/coordinator agents
+kubectl apply -k k8s/kaos/catalog-specialist-agent
+kubectl apply -k k8s/kaos/reservation-specialist-agent
+kubectl apply -k k8s/kaos/message-drafter-agent
+kubectl apply -k k8s/kaos/release-scout-agent
+kubectl apply -k k8s/kaos/review-summarizer-agent
+kubectl apply -k k8s/kaos/customer-concierge-agent
+kubectl apply -k k8s/kaos/store-manager-agent
+
+# Browser-facing services
+kubectl apply -k k8s/kaos/frontend-gateway
+kubectl apply -k k8s/kaos/frontend
+```
+
+Inspection, port-forwarding, and rollout commands:
+
+```bash
+# Inspect KAOS resources and generated workloads
+kubectl -n bookstore get modelapi,mcpserver,agent
+kubectl -n bookstore get pods,svc
+
+# Run these port-forwards in separate terminals when testing locally
+kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
+kubectl -n bookstore port-forward svc/frontend 3000:80
+
+# Restart every Deployment so pods are recreated and pull images as configured
+kubectl rollout restart deployment -n bookstore
+kubectl rollout status deployment -n bookstore
+```
+
 For plain Kubernetes without KAOS CRDs, use `k8s/base`. It deploys the backend,
 MCP servers, agents, gateway, Postgres, Ollama, the model-pull Job, Upcoming
 Releases MCP, Release Scout, and Review Summarizer as regular Kubernetes
 resources. It does not include a plain Kubernetes browser frontend manifest.
 
-Set `AZURE_AI_SEARCH_ENDPOINT` and the Azure AI Search key in
+Set `AZURE_AI_SEARCH_ENDPOINT` and at least one Azure AI Search key in
 `bookstore-secrets` before expecting Review Summarizer to retrieve live indexed
-reviews.
+reviews. Apply `bookstore-config` before the review summarizer workload because
+the Agent reads `AZURE_AI_SEARCH_INDEX_NAME` and `BOOK_REVIEW_SEARCH_TOP_K`.
 
 ```bash
 # Apply and inspect the plain Kubernetes stack
 kubectl apply -k k8s/base
 kubectl -n bookstore get deploy,svc,pvc,job
 kubectl -n bookstore logs job/ollama-pull-llama3-2-3b
+
+# Run port-forwards in separate terminals when testing locally
 kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 ```
 
