@@ -13,16 +13,17 @@ It assumes the KAOS operator and CRDs are already installed in the cluster.
 - `MCPServer/customer`: existing Customer FastMCP server as a custom runtime
 - `MCPServer/store-operations`: existing Store Operations FastMCP server as a custom runtime
 - `MCPServer/upcoming-releases`: Tavily-backed FastMCP server for upcoming book releases
-- Six `Agent` resources that run the current KAOS-deployed bookstore agent images
+- Seven `Agent` resources that run the current KAOS-deployed bookstore agent images
   - Existing agents use `ModelAPI/openai`
   - `Agent/release-scout` uses `ModelAPI/llama3-2-3b` and the upcoming releases MCP server
+  - `Agent/review-summarizer` uses `ModelAPI/openai` and Azure AI Search review retrieval
 - `frontend-gateway`: API gateway for chat and approvals
 - `frontend`: browser UI served by nginx
 - Postgres, config, secret, and demo-data reset resources needed by the bookstore stack
 
-Review Summarizer is available in the local Docker Compose stack, but this
-KAOS overlay has not added its `Agent` resource, service routing, or Azure AI
-Search secrets yet.
+Review Summarizer is deployed by this KAOS overlay and requires
+`AZURE_AI_SEARCH_ENDPOINT` plus either `AZURE_AI_SEARCH_QUERY_KEY` or
+`AZURE_AI_SEARCH_ADMIN_KEY` in `bookstore-secrets` to retrieve indexed reviews.
 
 ## Layout
 
@@ -46,12 +47,11 @@ Each deployable unit has its own folder and local `kustomization.yaml`:
 - `reservation-specialist-agent/`
 - `message-drafter-agent/`
 - `release-scout-agent/`
+- `review-summarizer-agent/`
 - `customer-concierge-agent/`
 - `store-manager-agent/`
 - `frontend-gateway/`
 - `frontend/`
-
-There is intentionally no `review-summarizer-agent/` folder in this round.
 
 The custom agent images preserve the current bookstore runtime behavior,
 including the human approval flow for mutating tools. The OpenAI-backed agents
@@ -72,7 +72,7 @@ make docker-build-all-images
 This rebuilds the browser frontend image too, which is required for the current
 agent list, prompt recommendations, and browser-local recent chat history to
 appear in the UI. The current frontend includes Review Summarizer in the agent
-list, but this KAOS overlay does not provide the backing agent service yet.
+list, and this KAOS overlay provides the backing agent service.
 
 For a shared cluster, push the images and update the `image:` fields in
 the relevant component folders.
@@ -80,13 +80,20 @@ the relevant component folders.
 Set `bookstore-secrets` with a real `OPENAI_API_KEY` before production use. The
 checked-in secret keeps the key empty by design. `MCPServer/upcoming-releases`
 also requires `TAVILY_API_KEY`; set it in `bookstore-secrets` before expecting
-live internet search results.
+live internet search results. `Agent/review-summarizer` also requires Azure AI
+Search credentials in `bookstore-secrets` before expecting live review
+retrieval.
 
 For local deployments, create `.LOCAL_KEYS` in the repository root:
 
 ```bash
+export DATABASE_URL=...
+export POSTGRES_PASSWORD=...
+export AZURE_AI_SEARCH_ENDPOINT=...
 export OPENAI_API_KEY=...
 export TAVILY_API_KEY=...
+export AZURE_AI_SEARCH_ADMIN_KEY=...
+export AZURE_AI_SEARCH_QUERY_KEY=...
 ```
 
 Then create or update the real Kubernetes secret:
@@ -132,6 +139,7 @@ KAOS will create workload services named:
 - `agent-reservation-specialist`
 - `agent-message-drafter`
 - `agent-release-scout`
+- `agent-review-summarizer`
 - `agent-customer-concierge`
 - `agent-store-manager`
 - `frontend-gateway`

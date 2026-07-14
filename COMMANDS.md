@@ -123,9 +123,9 @@ make docker-build-all-images \
   IMAGE_TAG=0.1.0
 ```
 
-For KAOS, put `OPENAI_API_KEY` and `TAVILY_API_KEY` in the environment or in
-`.LOCAL_KEYS`. The checked-in `k8s/kaos/secrets.yaml` intentionally contains
-placeholders.
+For KAOS, put `OPENAI_API_KEY`, `TAVILY_API_KEY`, and the Azure AI Search keys
+used by Review Summarizer in the environment or in `.LOCAL_KEYS`. The checked-in
+`k8s/kaos/secrets.yaml` intentionally contains placeholders.
 
 ```bash
 # Inspect or apply the real bookstore secret
@@ -159,13 +159,12 @@ guarantee a fresh image.
 
 For plain Kubernetes without KAOS CRDs, use `k8s/base`. It deploys the backend,
 MCP servers, agents, gateway, Postgres, Ollama, the model-pull Job, Upcoming
-Releases MCP, and Release Scout as regular Kubernetes resources. It does not
-include a plain Kubernetes browser frontend manifest.
+Releases MCP, Release Scout, and Review Summarizer as regular Kubernetes
+resources. It does not include a plain Kubernetes browser frontend manifest.
 
-Review Summarizer is currently local/Compose-only; Kubernetes manifests and
-Azure AI Search secrets for that agent are intentionally deferred. The latest
-frontend image can show the Review Summarizer option in Kubernetes, but that
-option is not backed by a Kubernetes agent service yet.
+Set `AZURE_AI_SEARCH_ENDPOINT` and the Azure AI Search key in
+`bookstore-secrets` before expecting Review Summarizer to retrieve live indexed
+reviews.
 
 ```bash
 # Apply and inspect the plain Kubernetes stack

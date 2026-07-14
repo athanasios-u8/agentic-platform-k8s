@@ -28,6 +28,7 @@ spec:
       - catalog-specialist
       - reservation-specialist
       - message-drafter
+      - review-summarizer
   container:
     image: bookstore/customer-concierge-agent:local
     env:
@@ -49,6 +50,8 @@ spec:
         value: http://agent-reservation-specialist:8000
       - name: MESSAGE_DRAFTER_AGENT_URL
         value: http://agent-message-drafter:8000
+      - name: REVIEW_SUMMARIZER_AGENT_URL
+        value: http://agent-review-summarizer:8000
       - name: DATABASE_URL
         valueFrom:
           secretKeyRef:

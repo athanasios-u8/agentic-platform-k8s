@@ -5,6 +5,8 @@ metadata:
 data:
   OPENAI_MODEL: gpt-5.5
   OPENAI_TRACING_ENABLED: "true"
+  AZURE_AI_SEARCH_INDEX_NAME: srch-index-bookstore-dev
+  BOOK_REVIEW_SEARCH_TOP_K: "15"
   CATALOG_MCP_PORT: "8101"
   CUSTOMER_MCP_PORT: "8102"
   STORE_OPERATIONS_MCP_PORT: "8103"
@@ -19,12 +21,14 @@ data:
   RESERVATION_SPECIALIST_AGENT_PORT: "8204"
   MESSAGE_DRAFTER_AGENT_PORT: "8205"
   RELEASE_SCOUT_AGENT_PORT: "8206"
+  REVIEW_SUMMARIZER_AGENT_PORT: "8207"
   CUSTOMER_CONCIERGE_AGENT_URL: http://customer-concierge-agent:8201
   STORE_MANAGER_AGENT_URL: http://store-manager-agent:8202
   CATALOG_SPECIALIST_AGENT_URL: http://catalog-specialist-agent:8203
   RESERVATION_SPECIALIST_AGENT_URL: http://reservation-specialist-agent:8204
   MESSAGE_DRAFTER_AGENT_URL: http://message-drafter-agent:8205
   RELEASE_SCOUT_AGENT_URL: http://release-scout-agent:8206
+  REVIEW_SUMMARIZER_AGENT_URL: http://review-summarizer-agent:8207
   OLLAMA_MODEL: llama3.2:3b
   OLLAMA_BASE_URL: http://ollama:11434
   OLLAMA_API_KEY: ollama

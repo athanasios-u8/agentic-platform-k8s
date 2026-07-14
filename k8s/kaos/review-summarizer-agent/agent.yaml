@@ -1,0 +1,91 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  name: review-summarizer
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: review-summarizer-agent
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: bookstore-agents
+spec:
+  modelAPI: openai
+  model: gpt-5.5
+  config:
+    description: Summarizes customer reviews for a requested book using Azure AI Search.
+    instructions: |
+      You are the Review Summarizer for a local bookstore. Summarize only the retrieved
+      customer reviews for the requested book. Separate what readers like from what
+      they dislike, mention sentiment balance when useful, and do not invent reviews
+      or facts beyond the supplied review context.
+    reasoningLoopMaxSteps: 5
+  agentNetwork:
+    expose: true
+    access: []
+  container:
+    image: bookstore/review-summarizer-agent:local
+    env:
+      - name: BOOKSTORE_SERVICE_MODULE
+        value: bookstore_agents.agents.review_summarizer.server
+      - name: REVIEW_SUMMARIZER_AGENT_PORT
+        value: "8000"
+      - name: OPENAI_MODEL
+        value: gpt-5.5
+      - name: AZURE_AI_SEARCH_ENDPOINT
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: AZURE_AI_SEARCH_ENDPOINT
+      - name: AZURE_AI_SEARCH_INDEX_NAME
+        valueFrom:
+          configMapKeyRef:
+            name: bookstore-config
+            key: AZURE_AI_SEARCH_INDEX_NAME
+      - name: BOOK_REVIEW_SEARCH_TOP_K
+        valueFrom:
+          configMapKeyRef:
+            name: bookstore-config
+            key: BOOK_REVIEW_SEARCH_TOP_K
+      - name: DATABASE_URL
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: DATABASE_URL
+      - name: AZURE_AI_SEARCH_ADMIN_KEY
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: AZURE_AI_SEARCH_ADMIN_KEY
+      - name: AZURE_AI_SEARCH_QUERY_KEY
+        valueFrom:
+          secretKeyRef:
+            name: bookstore-secrets
+            key: AZURE_AI_SEARCH_QUERY_KEY
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  podSpec:
+    enableServiceLinks: false
+    containers:
+      - name: agent
+        envFrom:
+          - configMapRef:
+              name: bookstore-config
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8000
+          initialDelaySeconds: 20
+          periodSeconds: 20
+          timeoutSeconds: 3
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3

@@ -16,5 +16,7 @@ Do not use for: refactoring, writing scripts from scratch, debugging business lo
 ## Repository change checks
 
 - After every change in this repository, use the codex-wide `$align-env-files` skill before finalizing.
+- After every change in this repository, use the codex-wide `$repo-docs-update` skill before finalizing.
+- Treat both `$align-env-files` and `$repo-docs-update` as mandatory for all repository changes, including code, configuration, Kubernetes manifests, scripts, tests, and documentation.
 - Run its bundled checker from the repository root and fix any reported key, duplicate, or order drift between `.env` and `.env.example`.
 - Never print or summarize `.env` values; only report whether the files are aligned and which keys need attention if the checker reports mismatches.

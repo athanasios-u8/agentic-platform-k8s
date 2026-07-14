@@ -281,6 +281,7 @@ resources for `ModelAPI`, `MCPServer`, and `Agent` workloads, including:
 - `ModelAPI/llama3-2-3b` for the hosted Ollama `llama3.2:3b` runtime
 - `MCPServer/upcoming-releases` for Tavily-backed internet search
 - `Agent/release-scout` for upcoming book-release scouting
+- `Agent/review-summarizer` for Azure AI Search-backed review summaries
 
 Build all images, including the frontend image that contains agent-specific
 prompt recommendations and local chat history:
@@ -290,8 +291,8 @@ make docker-build-all-images
 ```
 
 `k8s/kaos/secrets.yaml` intentionally contains placeholders. For a local KAOS
-cluster, put `OPENAI_API_KEY` and `TAVILY_API_KEY` in `.LOCAL_KEYS`, then apply
-the real secret with:
+cluster, put `OPENAI_API_KEY`, `TAVILY_API_KEY`, and the Azure AI Search keys
+used by Review Summarizer in `.LOCAL_KEYS`, then apply the real secret with:
 
 ```bash
 bash deploy-secret.sh
@@ -335,15 +336,13 @@ guarantee a fresh image.
 
 For clusters without KAOS CRDs, `k8s/base` provides plain Kubernetes manifests
 for the backend, MCP servers, agents, gateway, Postgres, Ollama, the model-pull
-Job, Upcoming Releases MCP server, and Release Scout agent. It does not include
-a plain Kubernetes browser frontend manifest; use the KAOS overlay or Docker
-Compose when you need the browser UI.
+Job, Upcoming Releases MCP server, Release Scout agent, and Review Summarizer
+agent. It does not include a plain Kubernetes browser frontend manifest; use the
+KAOS overlay or Docker Compose when you need the browser UI.
 
-Review Summarizer is currently wired for local Docker Compose and direct local
-service runs. Kubernetes manifests for that agent and the Azure AI Search review
-configuration are intentionally deferred. If you deploy the latest frontend
-image to Kubernetes before adding those manifests, the Review Summarizer option
-can appear in the UI but will not have a backing Kubernetes agent service.
+Set `AZURE_AI_SEARCH_ENDPOINT` and the Azure AI Search key in
+`bookstore-secrets` before expecting Review Summarizer to retrieve live indexed
+reviews.
 
 ## Observability
 

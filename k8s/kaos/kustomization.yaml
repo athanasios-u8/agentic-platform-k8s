@@ -17,6 +17,7 @@ resources:
   - reservation-specialist-agent
   - message-drafter-agent
   - release-scout-agent
+  - review-summarizer-agent
   - customer-concierge-agent
   - store-manager-agent
   - frontend-gateway
