@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1380" viewBox="0 0 1800 1380" role="img" aria-labelledby="title desc">
+  <title id="title">Bookstore Agent Platform — Lightweight Azure Accelerator</title>
+  <desc id="desc">Public-first Azure accelerator architecture. Anonymous users enter through Azure DNS and the AKS public load balancer. A single AKS cluster hosts the frontend, gateway, seven agents, four MCP servers, jobs, PgBouncer, Flux, OpenTelemetry, and self-hosted Langfuse. Public Azure services provide Microsoft Foundry models, Azure AI Search, Blob Storage, PostgreSQL, Key Vault, Container Registry, Log Analytics, and Application Insights. All user-managed resources share one resource group, while AKS infrastructure resides in its required managed node resource group.</desc>
+
+  <defs>
+    <style>
+      .bg{fill:#f6f8fb}.ink{fill:#152238}.muted{fill:#5d6b7e}
+      .zone{fill:#fff;stroke:#9caabd;stroke-width:2}.platform{fill:#f2f7ff;stroke:#3976c6;stroke-width:2.5}
+      .dataZone{fill:#f7f3fb;stroke:#7652a3;stroke-width:2.5}.obsZone{fill:#f3f8f5;stroke:#36845b;stroke-width:2.5}
+      .external{fill:#f4f7fa;stroke:#65768b;stroke-width:2}.component{fill:#fff;stroke:#3976c6;stroke-width:1.5}
+      .nested{fill:#e4efff;stroke:#3976c6;stroke-width:1.5}.dataBox{fill:#fff;stroke:#7652a3;stroke-width:1.5}
+      .dataNested{fill:#eee7f7;stroke:#7652a3;stroke-width:1.5}.obsBox{fill:#fff;stroke:#36845b;stroke-width:1.5}
+      .obsNested{fill:#e4f1e8;stroke:#36845b;stroke-width:1.5}.neutralBox{fill:#fff;stroke:#65768b;stroke-width:1.5}
+      .title{font:700 31px Arial,sans-serif;fill:#152238}.subtitle{font:400 15px Arial,sans-serif;fill:#5d6b7e}
+      .zoneTitle{font:700 21px Arial,sans-serif;fill:#152238}.platformTitle{font:700 18px Arial,sans-serif}
+      .h{font:700 15px Arial,sans-serif;fill:#152238}.t{font:400 13px Arial,sans-serif;fill:#344258}
+      .small{font:400 11px Arial,sans-serif;fill:#5d6b7e}.tag{font:700 10px Arial,sans-serif;letter-spacing:.7px}
+      .footer{font:400 11px Arial,sans-serif;fill:#6d7888}.lineBlue{fill:none;stroke:#3976c6;stroke-width:2.5}
+      .lineData{fill:none;stroke:#7652a3;stroke-width:2.5}.lineObs{fill:none;stroke:#36845b;stroke-width:2.5}
+      .lineNeutral{fill:none;stroke:#65768b;stroke-width:2}.lineMgmt{fill:none;stroke:#65768b;stroke-width:2;stroke-dasharray:7 6}
+      .chipBlue{fill:#e4efff;stroke:#3976c6;stroke-width:1}.chipPurple{fill:#eee7f7;stroke:#7652a3;stroke-width:1}
+      .chipNeutral{fill:#eef1f5;stroke:#65768b;stroke-width:1}
+    </style>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#3976c6"/></marker>
+    <marker id="arrowData" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7652a3"/></marker>
+    <marker id="arrowObs" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#36845b"/></marker>
+    <marker id="arrowNeutral" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#65768b"/></marker>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#1d2a3a" flood-opacity=".10"/></filter>
+  </defs>
+
+  <!-- Canvas and title -->
+  <rect class="bg" width="1800" height="1380"/>
+  <rect x="0" y="0" width="1800" height="10" fill="#3976c6"/>
+  <text x="55" y="58" class="title">Bookstore Agent Platform — Lightweight Azure Accelerator</text>
+  <text x="55" y="84" class="subtitle">Public-first, single-region starting point • portable Kubernetes runtime • managed PostgreSQL, Foundry and AI Search</text>
+  <rect x="1415" y="34" width="145" height="30" rx="15" class="chipBlue"/><text x="1487" y="54" text-anchor="middle" class="tag" fill="#245b9d">PUBLIC-FIRST</text>
+  <rect x="1575" y="34" width="170" height="30" rx="15" class="chipNeutral"/><text x="1660" y="54" text-anchor="middle" class="tag" fill="#53657c">NO HA / NO BACKUP</text>
+
+  <!-- Public channels -->
+  <rect x="50" y="110" width="1700" height="125" rx="8" class="zone" filter="url(#shadow)"/>
+  <text x="70" y="140" class="zoneTitle">Public access and administration</text>
+
+  <rect x="75" y="157" width="275" height="58" rx="6" class="neutralBox"/>
+  <text x="95" y="181" class="h">Anonymous demo users</text><text x="95" y="202" class="small">Browser chat and approvals UI</text>
+
+  <rect x="380" y="157" width="275" height="58" rx="6" class="neutralBox"/>
+  <text x="400" y="181" class="h">Developers and operators</text><text x="400" y="202" class="small">Approved source IP ranges</text>
+
+  <rect x="685" y="157" width="260" height="58" rx="6" class="neutralBox"/>
+  <text x="815" y="181" text-anchor="middle" class="h">Azure DNS</text><text x="815" y="202" text-anchor="middle" class="small">Public application records</text>
+
+  <rect x="975" y="157" width="320" height="58" rx="6" class="neutralBox"/>
+  <text x="1135" y="181" text-anchor="middle" class="h">Public IP + Standard Load Balancer</text><text x="1135" y="202" text-anchor="middle" class="small">HTTPS application ingress</text>
+
+  <rect x="1325" y="157" width="395" height="58" rx="6" class="neutralBox"/>
+  <text x="1522" y="181" text-anchor="middle" class="h">Public AKS API</text><text x="1522" y="202" text-anchor="middle" class="small">Entra RBAC • authorized IP ranges</text>
+
+  <path d="M350 186 H685" class="lineNeutral" marker-end="url(#arrowNeutral)"/>
+  <path d="M945 186 H975" class="lineNeutral" marker-end="url(#arrowNeutral)"/>
+  <path d="M655 199 H670 V225 H1305 V199 H1325" class="lineMgmt" marker-end="url(#arrowNeutral)"/>
+
+  <!-- User-managed resource group -->
+  <rect x="50" y="265" width="1700" height="925" rx="10" class="zone" filter="url(#shadow)"/>
+  <text x="75" y="300" class="zoneTitle">User-managed resource group: rg-bookstore-accelerator-&lt;env&gt;</text>
+  <text x="75" y="320" class="small">All user-owned Azure resources • single region • public service endpoints protected by identity and RBAC</text>
+
+  <!-- AKS runtime boundary -->
+  <rect x="75" y="340" width="1080" height="820" rx="8" class="platform"/>
+  <text x="95" y="370" class="platformTitle" fill="#245b9d">Azure Kubernetes Service</text>
+  <text x="95" y="390" class="small">One autoscaling node pool • Azure CNI Overlay + Cilium • Workload Identity • portable Kubernetes components</text>
+
+  <!-- Ingress row -->
+  <rect x="100" y="410" width="1030" height="90" rx="6" class="component"/>
+  <text x="120" y="435" class="h">Public application entry</text>
+  <rect x="120" y="450" width="300" height="36" rx="4" class="nested"/><text x="270" y="473" text-anchor="middle" class="h">Envoy Gateway + TLS</text>
+  <rect x="450" y="450" width="300" height="36" rx="4" class="nested"/><text x="600" y="473" text-anchor="middle" class="h">Frontend</text>
+  <rect x="780" y="450" width="330" height="36" rx="4" class="nested"/><text x="945" y="473" text-anchor="middle" class="h">Frontend gateway + approvals</text>
+  <path d="M420 468 H450" class="lineBlue" marker-end="url(#arrowBlue)"/>
+  <path d="M420 480 V493 H765 V468 H780" class="lineBlue" marker-end="url(#arrowBlue)"/>
+
+  <!-- Agent group -->
+  <rect x="100" y="520" width="1030" height="170" rx="6" class="component"/>
+  <text x="120" y="545" class="h">Agent runtime — all production inference uses Microsoft Foundry</text>
+  <rect x="120" y="560" width="237" height="45" rx="4" class="nested"/><text x="238" y="579" text-anchor="middle" class="h">Customer Concierge</text><text x="238" y="596" text-anchor="middle" class="small">customer master</text>
+  <rect x="371" y="560" width="237" height="45" rx="4" class="nested"/><text x="489" y="579" text-anchor="middle" class="h">Store Manager</text><text x="489" y="596" text-anchor="middle" class="small">staff master</text>
+  <rect x="622" y="560" width="237" height="45" rx="4" class="nested"/><text x="740" y="579" text-anchor="middle" class="h">Catalog Specialist</text><text x="740" y="596" text-anchor="middle" class="small">catalog subagent</text>
+  <rect x="873" y="560" width="237" height="45" rx="4" class="nested"/><text x="991" y="579" text-anchor="middle" class="h">Reservation Specialist</text><text x="991" y="596" text-anchor="middle" class="small">reservation subagent</text>
+  <rect x="245" y="620" width="237" height="45" rx="4" class="nested"/><text x="363" y="639" text-anchor="middle" class="h">Message Drafter</text><text x="363" y="656" text-anchor="middle" class="small">response drafting</text>
+  <rect x="496" y="620" width="237" height="45" rx="4" class="nested"/><text x="614" y="639" text-anchor="middle" class="h">Release Scout</text><text x="614" y="656" text-anchor="middle" class="small">Foundry + Tavily</text>
+  <rect x="747" y="620" width="237" height="45" rx="4" class="nested"/><text x="865" y="639" text-anchor="middle" class="h">Review Summarizer</text><text x="865" y="656" text-anchor="middle" class="small">Foundry + AI Search</text>
+  <path d="M945 500 V520" class="lineBlue" marker-end="url(#arrowBlue)"/>
+
+  <!-- MCP group -->
+  <rect x="100" y="710" width="1030" height="105" rx="6" class="component"/>
+  <text x="120" y="735" class="h">MCP tool servers</text>
+  <rect x="120" y="750" width="237" height="45" rx="4" class="nested"/><text x="238" y="778" text-anchor="middle" class="h">Catalog MCP</text>
+  <rect x="371" y="750" width="237" height="45" rx="4" class="nested"/><text x="489" y="778" text-anchor="middle" class="h">Customer MCP</text>
+  <rect x="622" y="750" width="237" height="45" rx="4" class="nested"/><text x="740" y="778" text-anchor="middle" class="h">Store Operations MCP</text>
+  <rect x="873" y="750" width="237" height="45" rx="4" class="nested"/><text x="991" y="770" text-anchor="middle" class="h">Upcoming Releases MCP</text><text x="991" y="788" text-anchor="middle" class="small">Tavily web search</text>
+  <path d="M615 690 V710" class="lineBlue" marker-end="url(#arrowBlue)"/>
+
+  <!-- Platform services -->
+  <rect x="100" y="835" width="1030" height="100" rx="6" class="component"/>
+  <text x="120" y="860" class="h">Platform services and repeatable jobs</text>
+  <rect x="120" y="875" width="237" height="42" rx="4" class="nested"/><text x="238" y="901" text-anchor="middle" class="h">Flux GitOps</text>
+  <rect x="371" y="875" width="237" height="42" rx="4" class="nested"/><text x="489" y="901" text-anchor="middle" class="h">cert-manager</text>
+  <rect x="622" y="875" width="237" height="42" rx="4" class="nested"/><text x="740" y="893" text-anchor="middle" class="h">Migration, seed + review</text><text x="740" y="910" text-anchor="middle" class="small">generation / indexing jobs</text>
+  <rect x="873" y="875" width="237" height="42" rx="4" class="nested"/><text x="991" y="893" text-anchor="middle" class="h">PgBouncer</text><text x="991" y="910" text-anchor="middle" class="small">shared SQL connection pool</text>
+  <path d="M615 815 V825 H991 V875" class="lineBlue" marker-end="url(#arrowBlue)"/>
+
+  <!-- Portable observability -->
+  <rect x="100" y="955" width="1030" height="180" rx="6" class="obsBox"/>
+  <text x="120" y="980" class="h">Portable LLM observability in AKS</text>
+  <rect x="120" y="995" width="180" height="110" rx="4" class="obsNested"/>
+  <text x="210" y="1025" text-anchor="middle" class="h">OpenTelemetry</text><text x="210" y="1044" text-anchor="middle" class="h">Collector</text><text x="210" y="1070" text-anchor="middle" class="small">OTLP traces</text><text x="210" y="1088" text-anchor="middle" class="small">redaction + batching</text>
+  <rect x="320" y="995" width="790" height="110" rx="4" class="obsNested"/>
+  <text x="340" y="1020" class="h">Self-hosted Langfuse</text><text x="340" y="1038" class="small">Single replicas • accelerator data is disposable</text>
+  <rect x="340" y="1052" width="138" height="36" rx="4" class="obsBox"/><text x="409" y="1075" text-anchor="middle" class="h">Web</text>
+  <rect x="493" y="1052" width="138" height="36" rx="4" class="obsBox"/><text x="562" y="1075" text-anchor="middle" class="h">Worker</text>
+  <rect x="646" y="1052" width="138" height="36" rx="4" class="obsBox"/><text x="715" y="1075" text-anchor="middle" class="h">ClickHouse</text>
+  <rect x="799" y="1052" width="138" height="36" rx="4" class="obsBox"/><text x="868" y="1075" text-anchor="middle" class="h">Redis</text>
+  <rect x="952" y="1052" width="138" height="36" rx="4" class="obsBox"/><text x="1021" y="1075" text-anchor="middle" class="h">MinIO</text>
+  <path d="M300 1050 H320" class="lineObs" marker-end="url(#arrowObs)"/>
+
+  <!-- Managed data and AI services -->
+  <rect x="1180" y="340" width="545" height="500" rx="8" class="dataZone"/>
+  <text x="1200" y="370" class="platformTitle" fill="#62418d">Managed data, AI and platform services</text>
+  <text x="1200" y="389" class="small">Public endpoints initially • Workload Identity / RBAC where supported</text>
+
+  <rect x="1205" y="405" width="495" height="78" rx="6" class="dataBox"/>
+  <text x="1225" y="431" class="h">Microsoft Foundry</text><text x="1225" y="453" class="t">Foundry project • bookstore-chat deployment • content filters</text><text x="1225" y="471" class="small">OpenAI v1 API • all seven production agents</text>
+
+  <rect x="1205" y="500" width="235" height="84" rx="6" class="dataBox"/>
+  <text x="1225" y="526" class="h">Azure AI Search</text><text x="1225" y="548" class="t">Unstructured reviews</text><text x="1225" y="567" class="small">Basic • 1 replica / 1 partition</text>
+  <rect x="1465" y="500" width="235" height="84" rx="6" class="dataBox"/>
+  <text x="1485" y="526" class="h">Blob Storage</text><text x="1485" y="548" class="t">Canonical review corpus</text><text x="1485" y="567" class="small">GPv2 • LRS • rebuild source</text>
+
+  <rect x="1205" y="600" width="495" height="84" rx="6" class="dataBox"/>
+  <text x="1225" y="626" class="h">PostgreSQL Flexible Server</text><text x="1225" y="648" class="t">bookstore DB • langfuse DB • separate roles</text><text x="1225" y="667" class="small">Structured system of record • TLS • no HA</text>
+
+  <rect x="1205" y="701" width="235" height="84" rx="6" class="dataBox"/>
+  <text x="1225" y="727" class="h">Azure Key Vault</text><text x="1225" y="749" class="t">Runtime secrets</text><text x="1225" y="768" class="small">RBAC • CSI integration</text>
+  <rect x="1465" y="701" width="235" height="84" rx="6" class="dataBox"/>
+  <text x="1485" y="727" class="h">Container Registry</text><text x="1485" y="749" class="t">Immutable images</text><text x="1485" y="768" class="small">Standard • kubelet identity pull</text>
+
+  <!-- Managed monitoring -->
+  <rect x="1180" y="865" width="545" height="295" rx="8" class="obsZone"/>
+  <text x="1200" y="895" class="platformTitle" fill="#2c6f4c">Azure monitoring</text>
+  <text x="1200" y="914" class="small">Lightweight managed baseline • no Tempo or managed Grafana</text>
+  <rect x="1205" y="930" width="235" height="90" rx="6" class="obsBox"/>
+  <text x="1225" y="956" class="h">Log Analytics</text><text x="1225" y="978" class="t">Container Insights</text><text x="1225" y="997" class="small">logs • events • DCR</text>
+  <rect x="1465" y="930" width="235" height="90" rx="6" class="obsBox"/>
+  <text x="1485" y="956" class="h">Application Insights</text><text x="1485" y="978" class="t">requests • dependencies</text><text x="1485" y="997" class="small">exceptions • traces</text>
+  <rect x="1205" y="1040" width="495" height="88" rx="6" class="obsBox"/>
+  <text x="1225" y="1066" class="h">Action group + focused alerts</text><text x="1225" y="1088" class="t">ingress 5xx • pod restarts • DB saturation • Foundry / Search errors</text><text x="1225" y="1107" class="small">Cost thresholds • disk pressure • missing Langfuse ingestion</text>
+
+  <!-- Public entry into AKS -->
+  <path d="M1135 215 V330 H270 V450" class="lineBlue" marker-end="url(#arrowBlue)"/>
+
+  <!-- Data and AI flows through the central gutter -->
+  <path d="M1130 575 H1160 V444 H1205" class="lineData" marker-end="url(#arrowData)"/>
+  <text x="1164" y="430" class="small" fill="#62418d">model calls</text>
+  <path d="M984 642 H1145 V542 H1205" class="lineData" marker-end="url(#arrowData)"/>
+  <path d="M740 917 V943 H1168 V542 H1205" class="lineData" marker-end="url(#arrowData)"/>
+  <path d="M740 917 V949 H1174 V493 H1452 V542 H1465" class="lineData" marker-end="url(#arrowData)"/>
+  <path d="M1110 896 H1153 V642 H1205" class="lineData" marker-end="url(#arrowData)"/>
+  <text x="1157" y="675" class="small" fill="#62418d">SQL</text>
+  <path d="M1110 1080 H1142 V660 H1205" class="lineObs" marker-end="url(#arrowObs)"/>
+
+  <!-- Configuration and image supply -->
+  <path d="M1205 743 H1150 V890 H1130" class="lineMgmt" marker-end="url(#arrowNeutral)"/>
+  <path d="M1465 743 H1450 V815 H1140 V865 H1130" class="lineMgmt" marker-end="url(#arrowNeutral)"/>
+
+  <!-- Monitoring flows -->
+  <path d="M1130 975 H1205" class="lineObs" marker-end="url(#arrowObs)"/>
+  <path d="M1130 1010 H1450 V975 H1465" class="lineObs" marker-end="url(#arrowObs)"/>
+
+  <!-- AKS managed node resource group and external dependency -->
+  <rect x="50" y="1210" width="1340" height="120" rx="10" class="external" filter="url(#shadow)"/>
+  <text x="70" y="1238" class="zoneTitle">AKS-managed node resource group: rg-bookstore-accelerator-aks-nodes-&lt;env&gt;</text>
+  <text x="70" y="1257" class="small">Mandatory Azure-managed exception to the single resource-group preference — do not manage these resources independently</text>
+  <rect x="75" y="1270" width="295" height="42" rx="4" class="neutralBox"/><text x="222" y="1290" text-anchor="middle" class="h">Managed VNet + NSG</text><text x="222" y="1306" text-anchor="middle" class="small">Azure CNI Overlay</text>
+  <rect x="390" y="1270" width="295" height="42" rx="4" class="neutralBox"/><text x="537" y="1290" text-anchor="middle" class="h">VM scale-set node pool</text><text x="537" y="1306" text-anchor="middle" class="small">min 1 • max 3</text>
+  <rect x="705" y="1270" width="295" height="42" rx="4" class="neutralBox"/><text x="852" y="1290" text-anchor="middle" class="h">Load Balancer + public IPs</text><text x="852" y="1306" text-anchor="middle" class="small">ingress + outbound</text>
+  <rect x="1020" y="1270" width="345" height="42" rx="4" class="neutralBox"/><text x="1192" y="1290" text-anchor="middle" class="h">Node and persistent disks</text><text x="1192" y="1306" text-anchor="middle" class="small">ClickHouse + MinIO PVCs</text>
+  <path d="M615 1160 V1210" class="lineMgmt" marker-end="url(#arrowNeutral)"/>
+
+  <rect x="1420" y="1210" width="330" height="120" rx="10" class="external" filter="url(#shadow)"/>
+  <text x="1440" y="1238" class="zoneTitle">External service</text>
+  <rect x="1440" y="1260" width="290" height="52" rx="6" class="neutralBox"/>
+  <text x="1585" y="1283" text-anchor="middle" class="h">Tavily Search API</text><text x="1585" y="1302" text-anchor="middle" class="small">Public HTTPS • key from Key Vault</text>
+  <path d="M1110 772 H1165 V1198 H1405 V1286 H1440" class="lineNeutral" marker-end="url(#arrowNeutral)"/>
+
+  <!-- Legend and architectural note -->
+  <line x1="55" y1="1350" x2="95" y2="1350" class="lineBlue"/><text x="105" y="1354" class="footer">runtime request</text>
+  <line x1="235" y1="1350" x2="275" y2="1350" class="lineData"/><text x="285" y="1354" class="footer">data / AI</text>
+  <line x1="390" y1="1350" x2="430" y2="1350" class="lineObs"/><text x="440" y="1354" class="footer">telemetry</text>
+  <line x1="535" y1="1350" x2="575" y2="1350" class="lineMgmt"/><text x="585" y="1354" class="footer">management / configuration</text>
+  <text x="1745" y="1354" text-anchor="end" class="footer">Hardening path: private endpoints, managed WAF, zonal resilience, authentication and backups</text>
+</svg>

@@ -15,8 +15,16 @@ This repository implements a demo multi-agent bookstore assistant:
 Useful supporting docs:
 
 - `docs/bookstore-agent-scenario.md`
+- `docs/architecture/azure-accelerator-architecture.svg`
+- `infra/terraform/README.md`
 - `frontend/README.md`
 - `COMMANDS.md`
+
+The initial Azure development foundation is defined in `infra/terraform`. It
+uses Sweden Central, the `nucleus-dev-swec-001` naming suffix, public connectivity,
+AKS workload identity, managed PostgreSQL, Microsoft Foundry, AI Search, Blob
+Storage, Key Vault, ACR, Log Analytics, and Application Insights. See the
+Terraform README for the exact resource list, security posture, and commands.
 
 ## Quick Start
 

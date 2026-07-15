@@ -11,3 +11,16 @@ deploy-secret.sh
 deploy-resources.sh
 .LOCAL_KEYS
 data/book_reviews/*.jsonl
+
+# Terraform working files, plans, and state. Environment tfvars are committed;
+# secrets must be supplied through Azure authentication or generated at apply.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
