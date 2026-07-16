@@ -1,11 +1,16 @@
 from functools import lru_cache
+from typing import Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-5.5", alias="OPENAI_MODEL")
@@ -25,6 +30,10 @@ class Settings(BaseSettings):
         default=None,
         alias="AZURE_AI_SEARCH_QUERY_KEY",
     )
+    azure_ai_search_use_managed_identity: bool = Field(
+        default=False,
+        alias="AZURE_AI_SEARCH_USE_MANAGED_IDENTITY",
+    )
     azure_ai_search_index_name: str = Field(
         default="srch-index-bookstore-dev",
         alias="AZURE_AI_SEARCH_INDEX_NAME",
@@ -36,10 +45,24 @@ class Settings(BaseSettings):
     )
     book_review_min_reviews: int = Field(default=10, alias="BOOK_REVIEW_MIN_REVIEWS")
     book_review_max_reviews: int = Field(default=15, alias="BOOK_REVIEW_MAX_REVIEWS")
+    book_review_max_books: int | None = Field(default=None, alias="BOOK_REVIEW_MAX_BOOKS")
     book_review_random_seed: int = Field(default=42, alias="BOOK_REVIEW_RANDOM_SEED")
     book_review_generation_model: str | None = Field(
         default=None,
         alias="BOOK_REVIEW_GENERATION_MODEL",
+    )
+    azure_openai_endpoint: str | None = Field(default=None, alias="AZURE_OPENAI_ENDPOINT")
+    azure_openai_api_version: str = Field(
+        default="2025-04-01-preview",
+        alias="AZURE_OPENAI_API_VERSION",
+    )
+    azure_openai_scope: str = Field(
+        default="https://cognitiveservices.azure.com/.default",
+        alias="AZURE_OPENAI_SCOPE",
+    )
+    azure_openai_use_managed_identity: bool = Field(
+        default=False,
+        alias="AZURE_OPENAI_USE_MANAGED_IDENTITY",
     )
 
     ollama_model: str = Field(default="llama3.2:3b", alias="OLLAMA_MODEL")
@@ -119,6 +142,13 @@ class Settings(BaseSettings):
     )
 
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+
+    @field_validator("book_review_max_books", mode="before")
+    @classmethod
+    def empty_book_limit_is_unset(cls, value: Any) -> Any:
+        if value == "":
+            return None
+        return value
 
 
 @lru_cache

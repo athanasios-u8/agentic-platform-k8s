@@ -130,7 +130,11 @@ AZURE_AI_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
 AZURE_AI_SEARCH_INDEX_NAME=srch-index-bookstore-dev
 AZURE_AI_SEARCH_ADMIN_KEY=...
 AZURE_AI_SEARCH_QUERY_KEY=
+AZURE_AI_SEARCH_USE_MANAGED_IDENTITY=false
 BOOK_REVIEW_SEARCH_TOP_K=15
+BOOK_REVIEW_MIN_REVIEWS=10
+BOOK_REVIEW_MAX_REVIEWS=15
+BOOK_REVIEW_MAX_BOOKS=
 ```
 
 Generate and upload the review corpus after Postgres has been seeded:
@@ -149,12 +153,11 @@ docker compose run --rm bookstore-cli bookstore-ai-search upload-reviews
 ```
 
 The generated JSONL file defaults to `data/book_reviews/book_reviews.jsonl` and
-is ignored by Git. In Kubernetes, `deploy-secret.sh` puts
-`AZURE_AI_SEARCH_ENDPOINT` and the Azure AI Search keys in `bookstore-secrets`;
-`AZURE_AI_SEARCH_INDEX_NAME` and `BOOK_REVIEW_SEARCH_TOP_K` stay in
-`bookstore-config`. Open the frontend and choose `Review Summarizer`, or ask
-Customer Concierge a review question such as "What do people like and dislike
-about The Lantern Cipher?"
+is ignored by Git. Local and reusable KAOS workflows can continue to use Search
+keys. The Azure AKS overlay instead enables workload identity for both the
+index-population Job and Review Summarizer. Open the frontend and choose Review
+Summarizer, or ask Customer Concierge a review question such as "What do people
+like and dislike about The Lantern Cipher?"
 
 ## Services
 
@@ -298,8 +301,35 @@ frontend images for local full-stack runs.
 
 ## Kubernetes
 
-The current full Kubernetes deployment lives in `k8s/kaos`. It uses KAOS custom
-resources for `ModelAPI`, `MCPServer`, and `Agent` workloads, including:
+The reusable KAOS deployment lives in `k8s/kaos`. The Azure-ready AKS variant
+lives in `k8s/azure`: it reuses those KAOS custom resources, replaces local
+PostgreSQL and OpenAI dependencies with the Terraform-provisioned Azure
+services, and injects AKS workload identities. `k8s/azure/dev` contains complete
+environment-specific manifests; Kustomize only aggregates those files and does
+not patch or transform them. See `k8s/azure/README.md` for the identity, Key
+Vault, ACR, Foundry, and environment-copying conventions.
+
+Render the Azure dev bundle locally without changing the cluster:
+
+```bash
+kubectl kustomize k8s/azure/dev > /tmp/nucleus-azure-dev.yaml
+```
+
+Azure PostgreSQL population is kept out of that bundle because it truncates and
+reseeds the demo tables. AI Search population is also separate because it runs
+Foundry generation and changes Search data. Both dev Jobs can be rendered
+safely:
+
+```bash
+k8s/azure/scripts/populate-postgres.sh --environment dev --render
+k8s/azure/scripts/populate-ai-search.sh --environment dev --render
+```
+
+See `k8s/azure/README.md` for the guarded commands and required order:
+PostgreSQL first, then AI Search.
+
+The underlying `k8s/kaos` deployment uses KAOS custom resources for `ModelAPI`,
+`MCPServer`, and `Agent` workloads, including:
 
 - `ModelAPI/openai` for the existing OpenAI-backed agents
 - `ModelAPI/llama3-2-3b` for the hosted Ollama `llama3.2:3b` runtime

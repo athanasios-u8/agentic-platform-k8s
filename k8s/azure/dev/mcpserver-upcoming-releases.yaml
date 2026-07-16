@@ -1,0 +1,49 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: MCPServer
+metadata:
+  labels:
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/name: upcoming-releases-mcp
+    app.kubernetes.io/part-of: bookstore-agents
+  name: upcoming-releases
+  namespace: nucleus
+spec:
+  container:
+    env:
+    - name: BOOKSTORE_SERVICE_MODULE
+      value: bookstore_agents.mcp_servers.upcoming_releases.server
+    - name: UPCOMING_RELEASES_MCP_PORT
+      value: '8000'
+    - name: TAVILY_SEARCH_URL
+      valueFrom:
+        configMapKeyRef:
+          key: TAVILY_SEARCH_URL
+          name: bookstore-config
+    - name: TAVILY_API_KEY
+      valueFrom:
+        secretKeyRef:
+          key: TAVILY_API_KEY
+          name: bookstore-secrets
+          optional: true
+    - name: LOG_LEVEL
+      valueFrom:
+        configMapKeyRef:
+          key: LOG_LEVEL
+          name: bookstore-config
+    image: acrnucleusdevswec001.azurecr.io/bookstore/upcoming-releases-mcp:dev
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+  gatewayRoute:
+    timeout: 120s
+  podSpec:
+    containers:
+    - name: mcp-server
+      imagePullPolicy: Always
+    enableServiceLinks: false
+  runtime: custom

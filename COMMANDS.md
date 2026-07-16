@@ -105,6 +105,37 @@ is running.
 
 ## Images And Kubernetes
 
+### Azure dev manifests and data population
+
+The Azure dev directory contains complete manifests. Its Kustomization only
+aggregates files; it does not apply patches, replacements, generators, or image
+rewrites.
+
+Render the Azure application bundle and both separate population Jobs without
+contacting or changing a cluster:
+
+```bash
+kubectl kustomize k8s/azure/dev > /tmp/nucleus-azure-dev.yaml
+k8s/azure/scripts/populate-postgres.sh --environment dev --render
+k8s/azure/scripts/populate-ai-search.sh --environment dev --render
+```
+
+After the Azure application prerequisites and backend image exist, populate
+PostgreSQL first and AI Search second. Both commands require the environment
+name as confirmation:
+
+```bash
+k8s/azure/scripts/populate-postgres.sh --environment dev
+k8s/azure/scripts/populate-ai-search.sh --environment dev
+```
+
+The first command initializes the schema, truncates the bookstore demo tables,
+and reseeds them. The second reads that catalog, generates synthetic reviews
+with Foundry, creates or updates the Search index, and uploads the documents
+using the indexer workload identity. The PostgreSQL password comes from the
+Key Vault-synchronized `azure-database-credentials` Secret and is not stored in
+either manifest.
+
 ```bash
 # Build deployable images
 make docker-build-agent-mcp-images

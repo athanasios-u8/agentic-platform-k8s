@@ -1,0 +1,103 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: database-population
+    app.kubernetes.io/name: bookstore-populate-postgres
+    app.kubernetes.io/part-of: bookstore-agents
+  name: bookstore-populate-postgres-dev
+  namespace: nucleus
+spec:
+  activeDeadlineSeconds: 900
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: database-population
+        app.kubernetes.io/instance: dev
+        app.kubernetes.io/name: bookstore-populate-postgres
+        app.kubernetes.io/part-of: bookstore-agents
+    spec:
+      containers:
+      - args:
+        - python
+        - -m
+        - scripts.reset_demo_data
+        env:
+        - name: PGHOST
+          value: psql-nucleus-dev-swec-001.postgres.database.azure.com
+        - name: PGUSER
+          value: nucleusadmin
+        - name: DATABASE_URL
+          value: dbname=bookstore
+        - name: PGPORT
+          value: "5432"
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: azure-database-credentials
+        - name: PGSSLMODE
+          value: require
+        image: acrnucleusdevswec001.azurecr.io/bookstore/backend:dev
+        imagePullPolicy: Always
+        name: populate-postgres
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 50m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsGroup: 999
+          runAsUser: 999
+      enableServiceLinks: false
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - until pg_isready; do sleep 2; done
+        env:
+        - name: PGHOST
+          value: psql-nucleus-dev-swec-001.postgres.database.azure.com
+        - name: PGUSER
+          value: nucleusadmin
+        - name: PGPORT
+          value: "5432"
+        - name: PGDATABASE
+          value: bookstore
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: azure-database-credentials
+        image: postgres:16-alpine
+        imagePullPolicy: IfNotPresent
+        name: wait-for-postgres
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 32Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+      restartPolicy: Never
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+  ttlSecondsAfterFinished: 86400

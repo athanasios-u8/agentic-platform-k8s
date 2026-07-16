@@ -1,0 +1,68 @@
+---
+apiVersion: v1
+data:
+  APPROVAL_REQUIRED_FOR_WRITES: 'true'
+  APPROVAL_STATE_STORE: postgres
+  AZURE_AI_SEARCH_INDEX_NAME: srch-index-bookstore-dev
+  BOOK_REVIEW_SEARCH_TOP_K: '15'
+  CATALOG_MCP_PORT: '8000'
+  CATALOG_MCP_URL: http://mcpserver-catalog:8000/mcp
+  CATALOG_SPECIALIST_AGENT_PORT: '8000'
+  CATALOG_SPECIALIST_AGENT_URL: http://agent-catalog-specialist:8000
+  CHATKIT_API_PATH: "/chatkit"
+  CUSTOMER_CONCIERGE_AGENT_PORT: '8000'
+  CUSTOMER_CONCIERGE_AGENT_URL: http://agent-customer-concierge:8000
+  CUSTOMER_MCP_PORT: '8000'
+  CUSTOMER_MCP_URL: http://mcpserver-customer:8000/mcp
+  FRONTEND_GATEWAY_PORT: '8300'
+  FRONTEND_GATEWAY_PUBLIC_URL: http://localhost:8300
+  LOG_LEVEL: INFO
+  MESSAGE_DRAFTER_AGENT_PORT: '8000'
+  MESSAGE_DRAFTER_AGENT_URL: http://agent-message-drafter:8000
+  OBSERVABILITY_CAPTURE_CONTENT: 'true'
+  OBSERVABILITY_CONTENT_MAX_CHARS: '6000'
+  OBSERVABILITY_ENABLED: 'false'
+  OLLAMA_API_KEY: ollama
+  OLLAMA_BASE_URL: http://modelapi-llama3-2-3b:11434
+  OLLAMA_MODEL: llama3.2:3b
+  OPENAI_MODEL: gpt-5-mini
+  OPENAI_TRACING_ENABLED: 'true'
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector.monitoring.svc.cluster.local:4318/v1/traces
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment=dev,service.namespace=bookstore-agents
+  RELEASE_SCOUT_AGENT_PORT: '8000'
+  RELEASE_SCOUT_AGENT_URL: http://agent-release-scout:8000
+  RESERVATION_SPECIALIST_AGENT_PORT: '8000'
+  RESERVATION_SPECIALIST_AGENT_URL: http://agent-reservation-specialist:8000
+  REVIEW_SUMMARIZER_AGENT_PORT: '8000'
+  REVIEW_SUMMARIZER_AGENT_URL: http://agent-review-summarizer:8000
+  STORE_MANAGER_AGENT_PORT: '8000'
+  STORE_MANAGER_AGENT_URL: http://agent-store-manager:8000
+  STORE_OPERATIONS_MCP_PORT: '8000'
+  STORE_OPERATIONS_MCP_URL: http://mcpserver-store-operations:8000/mcp
+  TAVILY_SEARCH_URL: https://api.tavily.com/search
+  UPCOMING_RELEASES_MCP_PORT: '8000'
+  UPCOMING_RELEASES_MCP_URL: http://mcpserver-upcoming-releases:8000/mcp
+kind: ConfigMap
+metadata:
+  name: bookstore-config
+  namespace: nucleus
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-foundry-litellm
+  namespace: nucleus
+type: Opaque
+stringData:
+  config.yaml: |
+    model_list:
+      - model_name: gpt-5-mini
+        litellm_params:
+          model: azure/model-nucleus-dev-swec-001
+          api_base: https://aif-nucleus-dev-swec-001.openai.azure.com
+          api_version: 2025-04-01-preview
+          azure_scope: https://cognitiveservices.azure.com/.default
+    litellm_settings:
+      enable_azure_ad_token_refresh: true
+      drop_params: true
+      request_timeout: 120

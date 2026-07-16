@@ -1,0 +1,138 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app.kubernetes.io/component: search-population
+    app.kubernetes.io/name: bookstore-populate-ai-search
+    app.kubernetes.io/part-of: bookstore-agents
+  name: bookstore-populate-ai-search-dev
+  namespace: nucleus
+spec:
+  activeDeadlineSeconds: 3600
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: search-population
+        app.kubernetes.io/instance: dev
+        app.kubernetes.io/name: bookstore-populate-ai-search
+        app.kubernetes.io/part-of: bookstore-agents
+        azure.workload.identity/use: "true"
+    spec:
+      containers:
+      - args:
+        - bookstore-ai-search
+        - rebuild
+        env:
+        - name: PGHOST
+          value: psql-nucleus-dev-swec-001.postgres.database.azure.com
+        - name: PGUSER
+          value: nucleusadmin
+        - name: AZURE_AI_SEARCH_ENDPOINT
+          value: https://srch-nucleus-dev-swec-001.search.windows.net
+        - name: AZURE_AI_SEARCH_INDEX_NAME
+          value: srch-index-bookstore-dev
+        - name: AZURE_OPENAI_ENDPOINT
+          value: https://aif-nucleus-dev-swec-001.openai.azure.com
+        - name: BOOK_REVIEW_GENERATION_MODEL
+          value: model-nucleus-dev-swec-001
+        - name: DATABASE_URL
+          value: dbname=bookstore
+        - name: PGPORT
+          value: "5432"
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: azure-database-credentials
+        - name: PGSSLMODE
+          value: require
+        - name: AZURE_AI_SEARCH_USE_MANAGED_IDENTITY
+          value: "true"
+        - name: AZURE_OPENAI_API_VERSION
+          value: 2025-04-01-preview
+        - name: AZURE_OPENAI_SCOPE
+          value: https://cognitiveservices.azure.com/.default
+        - name: AZURE_OPENAI_USE_MANAGED_IDENTITY
+          value: "true"
+        - name: BOOK_REVIEW_DATA_PATH
+          value: /review-data/book_reviews.jsonl
+        - name: BOOK_REVIEW_MIN_REVIEWS
+          value: "3"
+        - name: BOOK_REVIEW_MAX_REVIEWS
+          value: "5"
+        - name: BOOK_REVIEW_MAX_BOOKS
+          value: "8"
+        - name: BOOK_REVIEW_RANDOM_SEED
+          value: "42"
+        - name: AZURE_TOKEN_CREDENTIALS
+          value: WorkloadIdentityCredential
+        image: acrnucleusdevswec001.azurecr.io/bookstore/backend:dev
+        imagePullPolicy: Always
+        name: populate-ai-search
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsGroup: 999
+          runAsUser: 999
+        volumeMounts:
+        - mountPath: /review-data
+          name: review-data
+      enableServiceLinks: false
+      initContainers:
+      - command:
+        - sh
+        - -c
+        - until pg_isready; do sleep 2; done
+        env:
+        - name: PGHOST
+          value: psql-nucleus-dev-swec-001.postgres.database.azure.com
+        - name: PGUSER
+          value: nucleusadmin
+        - name: PGPORT
+          value: "5432"
+        - name: PGDATABASE
+          value: bookstore
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: POSTGRES_PASSWORD
+              name: azure-database-credentials
+        image: postgres:16-alpine
+        imagePullPolicy: IfNotPresent
+        name: wait-for-postgres
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 32Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+      restartPolicy: Never
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: nucleus-indexer
+      volumes:
+      - emptyDir: {}
+        name: review-data
+  ttlSecondsAfterFinished: 86400

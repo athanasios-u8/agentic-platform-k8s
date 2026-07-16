@@ -1,0 +1,109 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  labels:
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/name: release-scout-agent
+    app.kubernetes.io/part-of: bookstore-agents
+  name: release-scout
+  namespace: nucleus
+spec:
+  agentNetwork:
+    access: []
+    expose: true
+  config:
+    description: Finds upcoming book releases by author, theme, or genre.
+    instructions: |
+      You are the Release Scout for a local bookstore. Find upcoming book releases by
+      author, theme, or genre. Use web search results as evidence, cite useful source
+      URLs, and clearly distinguish confirmed release dates from weaker release leads.
+    reasoningLoopMaxSteps: 5
+  container:
+    env:
+    - name: BOOKSTORE_SERVICE_MODULE
+      value: bookstore_agents.agents.release_scout.server
+    - name: RELEASE_SCOUT_AGENT_PORT
+      value: '8000'
+    - name: OLLAMA_MODEL
+      valueFrom:
+        configMapKeyRef:
+          key: OLLAMA_MODEL
+          name: bookstore-config
+    - name: OLLAMA_BASE_URL
+      valueFrom:
+        configMapKeyRef:
+          key: OLLAMA_BASE_URL
+          name: bookstore-config
+    - name: OLLAMA_API_KEY
+      valueFrom:
+        configMapKeyRef:
+          key: OLLAMA_API_KEY
+          name: bookstore-config
+    - name: UPCOMING_RELEASES_MCP_URL
+      value: http://mcpserver-upcoming-releases:8000/mcp
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: POSTGRES_PASSWORD
+          name: azure-database-credentials
+    - name: DATABASE_URL
+      value: host=psql-nucleus-dev-swec-001.postgres.database.azure.com port=5432
+        dbname=bookstore user=nucleusadmin password=$(POSTGRES_PASSWORD) sslmode=require
+    image: acrnucleusdevswec001.azurecr.io/bookstore/release-scout-agent:dev
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+  mcpServers:
+  - upcoming-releases
+  model: llama3.2:3b
+  modelAPI: llama3-2-3b
+  podSpec:
+    containers:
+    - env:
+      - name: AZURE_CLIENT_ID
+        value: 890700b0-298a-4de7-88b8-20b83eb80ba5
+      - name: AZURE_TENANT_ID
+        value: 7a51efba-4cd4-4200-aea4-df68900aeac1
+      - name: AZURE_FEDERATED_TOKEN_FILE
+        value: "/var/run/secrets/azure/tokens/azure-identity-token"
+      - name: AZURE_AUTHORITY_HOST
+        value: https://login.microsoftonline.com/
+      envFrom:
+      - configMapRef:
+          name: bookstore-config
+      livenessProbe:
+        httpGet:
+          path: "/healthz"
+          port: 8000
+        initialDelaySeconds: 20
+        periodSeconds: 20
+        timeoutSeconds: 3
+      name: agent
+      imagePullPolicy: Always
+      readinessProbe:
+        httpGet:
+          path: "/readyz"
+          port: 8000
+        initialDelaySeconds: 5
+        periodSeconds: 10
+        timeoutSeconds: 3
+      volumeMounts:
+      - mountPath: "/var/run/secrets/azure/tokens"
+        name: azure-identity-token
+        readOnly: true
+    enableServiceLinks: false
+    serviceAccountName: nucleus-runtime
+    volumes:
+    - name: azure-identity-token
+      projected:
+        defaultMode: 420
+        sources:
+        - serviceAccountToken:
+            audience: api://AzureADTokenExchange
+            expirationSeconds: 3600
+            path: azure-identity-token

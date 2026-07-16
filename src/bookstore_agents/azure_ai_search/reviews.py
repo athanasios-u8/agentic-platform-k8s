@@ -2,18 +2,13 @@ import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from random import Random
-from typing import Literal
+from typing import Any, Literal, cast
 
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from bookstore_agents.azure_ai_search.catalog import BookRecord, list_books
 from bookstore_agents.common.config import get_settings
-
-try:
-    from openai import AsyncOpenAI
-except Exception:  # pragma: no cover
-    AsyncOpenAI = None  # type: ignore[assignment]
-
 
 Sentiment = Literal["positive", "negative", "neutral"]
 SentimentProfile = Literal["positive-heavy", "balanced", "negative-heavy"]
@@ -63,6 +58,16 @@ class ReviewDocument(BaseModel):
 
 class ReviewGenerationError(RuntimeError):
     pass
+
+
+def _async_default_credential() -> Any:
+    try:
+        from azure.identity.aio import DefaultAzureCredential
+    except Exception as exc:  # pragma: no cover
+        raise ReviewGenerationError(
+            "Install azure-identity to generate reviews with Azure workload identity."
+        ) from exc
+    return DefaultAzureCredential()
 
 
 def build_review_plans(
@@ -119,8 +124,9 @@ def _sentiments_for_profile(
             negative = positive + 1
             neutral = max(0, count - positive - negative)
 
-    sentiments: list[Sentiment] = (
-        ["positive"] * positive + ["negative"] * negative + ["neutral"] * neutral
+    sentiments = cast(
+        list[Sentiment],
+        ["positive"] * positive + ["negative"] * negative + ["neutral"] * neutral,
     )
     rng.shuffle(sentiments)
     return sentiments
@@ -140,11 +146,39 @@ class OpenAIReviewGenerator:
         api_key = settings.openai_api_key
         base_url = settings.openai_base_url or settings.model_api_url
         self.model = settings.book_review_generation_model or settings.openai_model
-        self.client = (
-            AsyncOpenAI(api_key=api_key, base_url=base_url.rstrip("/") if base_url else None)
-            if AsyncOpenAI and api_key
-            else None
-        )
+        self.azure_credential: Any | None = None
+        self.client: AsyncOpenAI | None
+
+        if settings.azure_openai_use_managed_identity:
+            if not settings.azure_openai_endpoint:
+                raise ReviewGenerationError(
+                    "AZURE_OPENAI_ENDPOINT is required for managed identity review generation."
+                )
+            azure_credential = _async_default_credential()
+            self.azure_credential = azure_credential
+
+            async def token_provider() -> str:
+                token = await azure_credential.get_token(settings.azure_openai_scope)
+                return token.token
+
+            self.client = AsyncAzureOpenAI(
+                azure_endpoint=settings.azure_openai_endpoint.rstrip("/"),
+                azure_deployment=self.model,
+                api_version=settings.azure_openai_api_version,
+                azure_ad_token_provider=token_provider,
+            )
+        else:
+            self.client = (
+                AsyncOpenAI(api_key=api_key, base_url=base_url.rstrip("/") if base_url else None)
+                if api_key
+                else None
+            )
+
+    async def close(self) -> None:
+        if self.client is not None:
+            await self.client.close()
+        if self.azure_credential is not None:
+            await self.azure_credential.close()
 
     async def generate_for_book(
         self,
@@ -152,7 +186,9 @@ class OpenAIReviewGenerator:
         plan: ReviewGenerationPlan,
     ) -> GeneratedReviewBatch:
         if self.client is None:
-            raise ReviewGenerationError("OPENAI_API_KEY is required to generate book reviews.")
+            raise ReviewGenerationError(
+                "OPENAI_API_KEY or Azure managed identity is required to generate book reviews."
+            )
 
         prompt = _generation_prompt(book, plan)
         response = await self.client.responses.create(
@@ -173,8 +209,7 @@ class OpenAIReviewGenerator:
             raise ReviewGenerationError(f"OpenAI returned invalid review JSON: {exc}") from exc
         if len(batch.reviews) != plan.review_count:
             raise ReviewGenerationError(
-                f"Expected {plan.review_count} reviews for {book.title}, "
-                f"got {len(batch.reviews)}."
+                f"Expected {plan.review_count} reviews for {book.title}, got {len(batch.reviews)}."
             )
         return batch
 
@@ -249,27 +284,34 @@ async def generate_review_documents(
 ) -> list[ReviewDocument]:
     settings = get_settings()
     books = books if books is not None else list_books()
+    if settings.book_review_max_books is not None:
+        books = books[: settings.book_review_max_books]
     plans = build_review_plans(
         books,
         min_reviews=settings.book_review_min_reviews,
         max_reviews=settings.book_review_max_reviews,
         seed=settings.book_review_random_seed,
     )
+    owns_generator = generator is None
     generator = generator or OpenAIReviewGenerator()
     generated_at = datetime.now(UTC).isoformat()
 
     documents: list[ReviewDocument] = []
-    for book in books:
-        batch = await generator.generate_for_book(book, plans[book.id])
-        documents.extend(
-            documents_from_batch(
-                book,
-                plans[book.id],
-                batch,
-                generated_at,
-                settings.book_review_random_seed,
+    try:
+        for book in books:
+            batch = await generator.generate_for_book(book, plans[book.id])
+            documents.extend(
+                documents_from_batch(
+                    book,
+                    plans[book.id],
+                    batch,
+                    generated_at,
+                    settings.book_review_random_seed,
+                )
             )
-        )
+    finally:
+        if owns_generator:
+            await generator.close()
     return documents
 
 

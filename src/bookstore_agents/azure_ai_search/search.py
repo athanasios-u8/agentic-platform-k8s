@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from functools import lru_cache
 from typing import Any
 
 from bookstore_agents.azure_ai_search.reviews import ReviewDocument
@@ -32,6 +33,17 @@ def _azure_imports() -> dict[str, Any]:
     }
 
 
+@lru_cache(maxsize=1)
+def _managed_identity_credential() -> Any:
+    try:
+        from azure.identity import DefaultAzureCredential
+    except Exception as exc:  # pragma: no cover
+        raise AzureSearchConfigError(
+            "Install azure-identity to use Azure AI Search managed identity authentication."
+        ) from exc
+    return DefaultAzureCredential()
+
+
 def _endpoint() -> str:
     settings = get_settings()
     endpoint = settings.azure_ai_search_endpoint
@@ -50,6 +62,13 @@ def _credential_key(admin: bool) -> str:
     return key
 
 
+def _credential(admin: bool, azure: dict[str, Any]) -> Any:
+    settings = get_settings()
+    if settings.azure_ai_search_use_managed_identity:
+        return _managed_identity_credential()
+    return azure["AzureKeyCredential"](_credential_key(admin))
+
+
 def _index_name() -> str:
     return get_settings().azure_ai_search_index_name
 
@@ -58,7 +77,7 @@ def _index_client(index_client: Any | None = None) -> Any:
     if index_client is not None:
         return index_client
     azure = _azure_imports()
-    credential = azure["AzureKeyCredential"](_credential_key(admin=True))
+    credential = _credential(admin=True, azure=azure)
     return azure["SearchIndexClient"](endpoint=_endpoint(), credential=credential)
 
 
@@ -66,7 +85,7 @@ def _search_client(search_client: Any | None = None, *, admin: bool = False) -> 
     if search_client is not None:
         return search_client
     azure = _azure_imports()
-    credential = azure["AzureKeyCredential"](_credential_key(admin=admin))
+    credential = _credential(admin=admin, azure=azure)
     return azure["SearchClient"](
         endpoint=_endpoint(),
         index_name=_index_name(),

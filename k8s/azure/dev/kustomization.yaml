@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - serviceaccounts.yaml
+  - configuration.yaml
+  - key-vault.yaml
+  - modelapi-llama3-2-3b.yaml
+  - modelapi-openai.yaml
+  - mcpserver-catalog.yaml
+  - mcpserver-customer.yaml
+  - mcpserver-store-operations.yaml
+  - mcpserver-upcoming-releases.yaml
+  - agent-catalog-specialist.yaml
+  - agent-customer-concierge.yaml
+  - agent-message-drafter.yaml
+  - agent-release-scout.yaml
+  - agent-reservation-specialist.yaml
+  - agent-review-summarizer.yaml
+  - agent-store-manager.yaml
+  - frontend-gateway.yaml
+  - frontend.yaml

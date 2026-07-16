@@ -1,0 +1,119 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  labels:
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/name: review-summarizer-agent
+    app.kubernetes.io/part-of: bookstore-agents
+  name: review-summarizer
+  namespace: nucleus
+spec:
+  agentNetwork:
+    access: []
+    expose: true
+  config:
+    description: Summarizes customer reviews for a requested book using Azure AI Search.
+    instructions: |
+      You are the Review Summarizer for a local bookstore. Summarize only the retrieved
+      customer reviews for the requested book. Separate what readers like from what
+      they dislike, mention sentiment balance when useful, and do not invent reviews
+      or facts beyond the supplied review context.
+    reasoningLoopMaxSteps: 5
+  container:
+    env:
+    - name: BOOKSTORE_SERVICE_MODULE
+      value: bookstore_agents.agents.review_summarizer.server
+    - name: REVIEW_SUMMARIZER_AGENT_PORT
+      value: '8000'
+    - name: OPENAI_MODEL
+      value: gpt-5-mini
+    - name: AZURE_AI_SEARCH_ENDPOINT
+      value: https://srch-nucleus-dev-swec-001.search.windows.net
+    - name: AZURE_AI_SEARCH_INDEX_NAME
+      valueFrom:
+        configMapKeyRef:
+          key: AZURE_AI_SEARCH_INDEX_NAME
+          name: bookstore-config
+    - name: BOOK_REVIEW_SEARCH_TOP_K
+      valueFrom:
+        configMapKeyRef:
+          key: BOOK_REVIEW_SEARCH_TOP_K
+          name: bookstore-config
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: POSTGRES_PASSWORD
+          name: azure-database-credentials
+    - name: DATABASE_URL
+      value: host=psql-nucleus-dev-swec-001.postgres.database.azure.com port=5432
+        dbname=bookstore user=nucleusadmin password=$(POSTGRES_PASSWORD) sslmode=require
+    - name: AZURE_AI_SEARCH_ADMIN_KEY
+      valueFrom:
+        secretKeyRef:
+          key: AZURE_AI_SEARCH_ADMIN_KEY
+          name: bookstore-secrets
+          optional: true
+    - name: AZURE_AI_SEARCH_QUERY_KEY
+      valueFrom:
+        secretKeyRef:
+          key: AZURE_AI_SEARCH_QUERY_KEY
+          name: bookstore-secrets
+          optional: true
+    - name: AZURE_AI_SEARCH_USE_MANAGED_IDENTITY
+      value: 'true'
+    image: acrnucleusdevswec001.azurecr.io/bookstore/review-summarizer-agent:dev
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+  model: gpt-5-mini
+  modelAPI: openai
+  podSpec:
+    containers:
+    - env:
+      - name: AZURE_CLIENT_ID
+        value: 890700b0-298a-4de7-88b8-20b83eb80ba5
+      - name: AZURE_TENANT_ID
+        value: 7a51efba-4cd4-4200-aea4-df68900aeac1
+      - name: AZURE_FEDERATED_TOKEN_FILE
+        value: "/var/run/secrets/azure/tokens/azure-identity-token"
+      - name: AZURE_AUTHORITY_HOST
+        value: https://login.microsoftonline.com/
+      envFrom:
+      - configMapRef:
+          name: bookstore-config
+      livenessProbe:
+        httpGet:
+          path: "/healthz"
+          port: 8000
+        initialDelaySeconds: 20
+        periodSeconds: 20
+        timeoutSeconds: 3
+      name: agent
+      imagePullPolicy: Always
+      readinessProbe:
+        httpGet:
+          path: "/readyz"
+          port: 8000
+        initialDelaySeconds: 5
+        periodSeconds: 10
+        timeoutSeconds: 3
+      volumeMounts:
+      - mountPath: "/var/run/secrets/azure/tokens"
+        name: azure-identity-token
+        readOnly: true
+    enableServiceLinks: false
+    serviceAccountName: nucleus-runtime
+    volumes:
+    - name: azure-identity-token
+      projected:
+        defaultMode: 420
+        sources:
+        - serviceAccountToken:
+            audience: api://AzureADTokenExchange
+            expirationSeconds: 3600
+            path: azure-identity-token

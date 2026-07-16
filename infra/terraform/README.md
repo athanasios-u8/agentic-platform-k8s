@@ -71,9 +71,10 @@ Terraform generates the PostgreSQL administrator password and stores it in Key
 Vault as `sec-nucleus-dev-swec-001`; no secret is committed to the tfvars file.
 
 Local authentication remains enabled for Storage and AI Search during the
-bootstrap phase because the current repository tooling still supports keys.
-The workload identity role assignments are already present so those keys can
-be removed after the application adapters use Microsoft Entra authentication.
+bootstrap phase because local repository tooling still supports keys. AI Search
+is configured for both API keys and Microsoft Entra authentication so the Azure
+AKS Search population and query paths can use workload identities without
+requiring Search keys.
 
 ## Use
 

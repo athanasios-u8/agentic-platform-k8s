@@ -171,6 +171,7 @@ resource "azurerm_search_service" "main" {
   sku                           = var.search_sku
   replica_count                 = 1
   partition_count               = 1
+  authentication_failure_mode   = "http401WithBearerChallenge"
   local_authentication_enabled  = true
   public_network_access_enabled = true
   tags                          = local.tags

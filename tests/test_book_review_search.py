@@ -70,6 +70,23 @@ def test_upload_review_documents_calls_search_client() -> None:
     assert calls["documents"][0]["review_text"] == "A crisp mystery with a satisfying ending."
 
 
+def test_managed_identity_credential_is_used_when_enabled(monkeypatch) -> None:
+    credential = object()
+    monkeypatch.setattr(
+        search,
+        "get_settings",
+        lambda: SimpleNamespace(azure_ai_search_use_managed_identity=True),
+    )
+    monkeypatch.setattr(search, "_managed_identity_credential", lambda: credential)
+
+    resolved = search._credential(
+        admin=True,
+        azure={"AzureKeyCredential": lambda _key: None},
+    )
+
+    assert resolved is credential
+
+
 def test_search_reviews_filters_by_normalized_title_and_top_k() -> None:
     calls = {}
 

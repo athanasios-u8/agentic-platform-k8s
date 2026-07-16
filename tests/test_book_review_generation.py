@@ -1,7 +1,9 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from bookstore_agents.azure_ai_search import reviews
 from bookstore_agents.azure_ai_search.catalog import BookRecord
 from bookstore_agents.azure_ai_search.reviews import (
     GeneratedReview,
@@ -71,6 +73,83 @@ async def test_generate_review_documents_uses_openai_batches() -> None:
     assert {document.book_title for document in documents} == {"The Lantern Cipher"}
     assert {document.synthetic for document in documents} == {True}
     assert all(document.review_text == "A useful short review." for document in documents)
+
+
+@pytest.mark.asyncio
+async def test_generate_review_documents_honors_book_limit(monkeypatch) -> None:
+    books = [book(index, f"Book {index}") for index in range(1, 6)]
+
+    class FakeGenerator:
+        async def generate_for_book(self, book_record, plan):
+            return GeneratedReviewBatch(
+                reviews=[
+                    GeneratedReview(
+                        headline=f"{book_record.title} review",
+                        body="Short but useful review for this book.",
+                    )
+                    for _ in range(plan.review_count)
+                ]
+            )
+
+    settings = SimpleNamespace(
+        book_review_min_reviews=4,
+        book_review_max_reviews=4,
+        book_review_max_books=2,
+        book_review_random_seed=42,
+    )
+    monkeypatch.setattr(reviews, "get_settings", lambda: settings)
+
+    documents = await generate_review_documents(books=books, generator=FakeGenerator())
+
+    assert {document.book_title for document in documents} == {"Book 1", "Book 2"}
+    assert len(documents) == 8
+
+
+@pytest.mark.asyncio
+async def test_review_generator_uses_azure_managed_identity(monkeypatch) -> None:
+    calls = {}
+
+    class FakeCredential:
+        async def get_token(self, scope):
+            calls["scope"] = scope
+            return SimpleNamespace(token="azure-token")
+
+        async def close(self):
+            calls["credential_closed"] = True
+
+    class FakeAzureOpenAI:
+        def __init__(self, **kwargs):
+            calls.update(kwargs)
+
+        async def close(self):
+            calls["client_closed"] = True
+
+    settings = SimpleNamespace(
+        openai_api_key=None,
+        openai_base_url=None,
+        model_api_url=None,
+        openai_model="fallback-model",
+        book_review_generation_model="model-nucleus-dev-swec-001",
+        azure_openai_use_managed_identity=True,
+        azure_openai_endpoint="https://aif.example.openai.azure.com",
+        azure_openai_scope="https://cognitiveservices.azure.com/.default",
+        azure_openai_api_version="2025-04-01-preview",
+    )
+    monkeypatch.setattr(reviews, "get_settings", lambda: settings)
+    monkeypatch.setattr(reviews, "AsyncAzureOpenAI", FakeAzureOpenAI)
+    monkeypatch.setattr(reviews, "_async_default_credential", FakeCredential)
+
+    generator = reviews.OpenAIReviewGenerator()
+    token = await calls["azure_ad_token_provider"]()
+    await generator.close()
+
+    assert calls["azure_endpoint"] == "https://aif.example.openai.azure.com"
+    assert calls["azure_deployment"] == "model-nucleus-dev-swec-001"
+    assert calls["api_version"] == "2025-04-01-preview"
+    assert calls["scope"] == "https://cognitiveservices.azure.com/.default"
+    assert token == "azure-token"
+    assert calls["client_closed"] is True
+    assert calls["credential_closed"] is True
 
 
 def test_review_jsonl_roundtrip(tmp_path: Path) -> None:

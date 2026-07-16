@@ -1,0 +1,98 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: Agent
+metadata:
+  labels:
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/name: reservation-specialist-agent
+    app.kubernetes.io/part-of: bookstore-agents
+  name: reservation-specialist
+  namespace: nucleus
+spec:
+  agentNetwork:
+    access: []
+    expose: true
+  config:
+    description: Checks stock and prepares reservation changes with human approval.
+    instructions: |
+      You are the Reservation Specialist. Check stock and prepare reservation actions.
+      Write actions require human approval before they mutate the database.
+    reasoningLoopMaxSteps: 5
+  container:
+    env:
+    - name: BOOKSTORE_SERVICE_MODULE
+      value: bookstore_agents.agents.reservation_specialist.server
+    - name: RESERVATION_SPECIALIST_AGENT_PORT
+      value: '8000'
+    - name: OPENAI_MODEL
+      value: gpt-5-mini
+    - name: STORE_OPERATIONS_MCP_URL
+      value: http://mcpserver-store-operations:8000/mcp
+    - name: CUSTOMER_MCP_URL
+      value: http://mcpserver-customer:8000/mcp
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: POSTGRES_PASSWORD
+          name: azure-database-credentials
+    - name: DATABASE_URL
+      value: host=psql-nucleus-dev-swec-001.postgres.database.azure.com port=5432
+        dbname=bookstore user=nucleusadmin password=$(POSTGRES_PASSWORD) sslmode=require
+    image: acrnucleusdevswec001.azurecr.io/bookstore/reservation-specialist-agent:dev
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+  mcpServers:
+  - store-operations
+  - customer
+  model: gpt-5-mini
+  modelAPI: openai
+  podSpec:
+    containers:
+    - env:
+      - name: AZURE_CLIENT_ID
+        value: 890700b0-298a-4de7-88b8-20b83eb80ba5
+      - name: AZURE_TENANT_ID
+        value: 7a51efba-4cd4-4200-aea4-df68900aeac1
+      - name: AZURE_FEDERATED_TOKEN_FILE
+        value: "/var/run/secrets/azure/tokens/azure-identity-token"
+      - name: AZURE_AUTHORITY_HOST
+        value: https://login.microsoftonline.com/
+      envFrom:
+      - configMapRef:
+          name: bookstore-config
+      livenessProbe:
+        httpGet:
+          path: "/healthz"
+          port: 8000
+        initialDelaySeconds: 20
+        periodSeconds: 20
+        timeoutSeconds: 3
+      name: agent
+      imagePullPolicy: Always
+      readinessProbe:
+        httpGet:
+          path: "/readyz"
+          port: 8000
+        initialDelaySeconds: 5
+        periodSeconds: 10
+        timeoutSeconds: 3
+      volumeMounts:
+      - mountPath: "/var/run/secrets/azure/tokens"
+        name: azure-identity-token
+        readOnly: true
+    enableServiceLinks: false
+    serviceAccountName: nucleus-runtime
+    volumes:
+    - name: azure-identity-token
+      projected:
+        defaultMode: 420
+        sources:
+        - serviceAccountToken:
+            audience: api://AzureADTokenExchange
+            expirationSeconds: 3600
+            path: azure-identity-token

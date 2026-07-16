@@ -1,0 +1,60 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: ModelAPI
+metadata:
+  labels:
+    app.kubernetes.io/component: modelapi
+    app.kubernetes.io/name: openai
+    app.kubernetes.io/part-of: bookstore-agents
+  name: openai
+  namespace: nucleus
+spec:
+  container:
+    env:
+    - name: LITELLM_LOG
+      value: INFO
+    resources:
+      limits:
+        cpu: '1'
+        memory: 1Gi
+      requests:
+        cpu: 100m
+        memory: 256Mi
+  gatewayRoute:
+    timeout: 120s
+  mode: Proxy
+  podSpec:
+    containers:
+    - env:
+      - name: AZURE_CLIENT_ID
+        value: 890700b0-298a-4de7-88b8-20b83eb80ba5
+      - name: AZURE_TENANT_ID
+        value: 7a51efba-4cd4-4200-aea4-df68900aeac1
+      - name: AZURE_FEDERATED_TOKEN_FILE
+        value: "/var/run/secrets/azure/tokens/azure-identity-token"
+      - name: AZURE_AUTHORITY_HOST
+        value: https://login.microsoftonline.com/
+      - name: AZURE_SCOPE
+        value: https://cognitiveservices.azure.com/.default
+      name: model-api
+      volumeMounts:
+      - mountPath: "/var/run/secrets/azure/tokens"
+        name: azure-identity-token
+        readOnly: true
+    serviceAccountName: nucleus-runtime
+    volumes:
+    - name: azure-identity-token
+      projected:
+        defaultMode: 420
+        sources:
+        - serviceAccountToken:
+            audience: api://AzureADTokenExchange
+            expirationSeconds: 3600
+            path: azure-identity-token
+  proxyConfig:
+    configYaml:
+      fromSecretKeyRef:
+        key: config.yaml
+        name: azure-foundry-litellm
+    models:
+    - gpt-5-mini

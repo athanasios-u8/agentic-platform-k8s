@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/name: nucleus
+    app.kubernetes.io/part-of: bookstore-agents
+  name: nucleus

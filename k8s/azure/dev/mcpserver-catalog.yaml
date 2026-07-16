@@ -1,0 +1,46 @@
+---
+apiVersion: kaos.tools/v1alpha1
+kind: MCPServer
+metadata:
+  labels:
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/name: catalog-mcp
+    app.kubernetes.io/part-of: bookstore-agents
+  name: catalog
+  namespace: nucleus
+spec:
+  container:
+    env:
+    - name: BOOKSTORE_SERVICE_MODULE
+      value: bookstore_agents.mcp_servers.catalog.server
+    - name: CATALOG_MCP_PORT
+      value: '8000'
+    - name: LOG_LEVEL
+      valueFrom:
+        configMapKeyRef:
+          key: LOG_LEVEL
+          name: bookstore-config
+    - name: POSTGRES_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          key: POSTGRES_PASSWORD
+          name: azure-database-credentials
+    - name: DATABASE_URL
+      value: host=psql-nucleus-dev-swec-001.postgres.database.azure.com port=5432
+        dbname=bookstore user=nucleusadmin password=$(POSTGRES_PASSWORD) sslmode=require
+    image: acrnucleusdevswec001.azurecr.io/bookstore/catalog-mcp:dev
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 50m
+        memory: 128Mi
+  gatewayRoute:
+    timeout: 60s
+  podSpec:
+    containers:
+    - name: mcp-server
+      imagePullPolicy: Always
+    enableServiceLinks: false
+  runtime: custom
