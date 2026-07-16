@@ -21,8 +21,11 @@ spec:
     spec:
       containers:
       - args:
-        - bookstore-ai-search
-        - rebuild
+        - sh
+        - -c
+        - |
+          bookstore-ai-search create-index
+          bookstore-ai-search upload-reviews --input /app/data/book_reviews/book_reviews.jsonl
         env:
         - name: PGHOST
           value: psql-nucleus-dev-swec-001.postgres.database.azure.com
@@ -32,10 +35,6 @@ spec:
           value: https://srch-nucleus-dev-swec-001.search.windows.net
         - name: AZURE_AI_SEARCH_INDEX_NAME
           value: srch-index-bookstore-dev
-        - name: AZURE_OPENAI_ENDPOINT
-          value: https://aif-nucleus-dev-swec-001.openai.azure.com
-        - name: BOOK_REVIEW_GENERATION_MODEL
-          value: model-nucleus-dev-swec-001
         - name: DATABASE_URL
           value: dbname=bookstore
         - name: PGPORT
@@ -48,12 +47,6 @@ spec:
         - name: PGSSLMODE
           value: require
         - name: AZURE_AI_SEARCH_USE_MANAGED_IDENTITY
-          value: "true"
-        - name: AZURE_OPENAI_API_VERSION
-          value: 2025-04-01-preview
-        - name: AZURE_OPENAI_SCOPE
-          value: https://cognitiveservices.azure.com/.default
-        - name: AZURE_OPENAI_USE_MANAGED_IDENTITY
           value: "true"
         - name: BOOK_REVIEW_DATA_PATH
           value: /review-data/book_reviews.jsonl

@@ -2,7 +2,7 @@ resource "azurerm_kubernetes_cluster" "main" {
   name                = local.names.aks
   location            = data.azurerm_resource_group.main.location
   resource_group_name = data.azurerm_resource_group.main.name
-  node_resource_group = local.names.node_resource_group
+  node_resource_group = local.deployment_in_vnet ? "${local.names.node_resource_group}-vnet" : local.names.node_resource_group
   dns_prefix          = local.names.aks_dns_prefix
   kubernetes_version  = var.aks_kubernetes_version
   sku_tier            = "Free"
@@ -30,6 +30,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     os_disk_size_gb      = 128
     os_disk_type         = "Managed"
     type                 = "VirtualMachineScaleSets"
+    vnet_subnet_id       = local.deployment_in_vnet ? azurerm_subnet.aks[0].id : null
     zones                = []
 
     upgrade_settings {
@@ -72,10 +73,10 @@ resource "azurerm_kubernetes_cluster" "main" {
   }
 
   dynamic "api_server_access_profile" {
-    for_each = length(var.aks_api_server_authorized_ip_ranges) == 0 ? [] : [1]
+    for_each = length(local.aks_api_server_authorized_ip_ranges_effective) == 0 ? [] : [1]
 
     content {
-      authorized_ip_ranges = var.aks_api_server_authorized_ip_ranges
+      authorized_ip_ranges = local.aks_api_server_authorized_ip_ranges_effective
     }
   }
 

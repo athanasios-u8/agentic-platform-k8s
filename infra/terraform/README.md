@@ -1,8 +1,15 @@
 # Azure development infrastructure
 
-This Terraform root creates the lightweight, public-first Azure foundation for
-the `nucleus` development environment in Sweden Central. It does not deploy the
-Kubernetes workloads or Helm releases.
+This Terraform root creates the Azure foundation for the `nucleus` development
+environment in Sweden Central. It supports two deployment modes through one
+switch:
+
+```hcl
+deployment_in_vnet = true  # secure mode using an existing VNet
+deployment_in_vnet = false # public/bootstrap mode
+```
+
+It does not deploy the Kubernetes workloads or Helm releases.
 
 ## Naming
 
@@ -30,8 +37,9 @@ published abbreviation exists.
 |---|---|---|
 | Organization | Existing IT-managed resource group | `nucleus_swec_dev-rg` |
 | Compute | Azure Kubernetes Service | `aks-nucleus-dev-swec-001`, public API, Free tier |
-| AKS infrastructure | AKS-managed node resource group | `rg-nucleus-dev-swec-002` |
-| Containers | Azure Container Registry | `acrnucleusdevswec001`, Basic |
+| AKS infrastructure | AKS-managed node resource group | `rg-nucleus-dev-swec-002`, or `rg-nucleus-dev-swec-002-vnet` in VNet mode |
+| Network | Existing VNet input for secure mode | `vnet-nucleus-dev-swec-001`, `10.80.0.0/16` |
+| Containers | Azure Container Registry | `acrnucleusdevswec001`, Basic in public mode, Premium in VNet mode |
 | Secrets | Azure Key Vault | `kv-nucleus-dev-swec-001`, RBAC enabled |
 | Relational data | Azure Database for PostgreSQL Flexible Server | `psql-nucleus-dev-swec-001`, burstable compute |
 | Databases | PostgreSQL databases | `bookstore` and `langfuse` |
@@ -49,13 +57,21 @@ or destroy that resource group. Azure requires AKS node resources to live in a
 separate resource group, so AKS creates `rg-nucleus-dev-swec-002`; Terraform
 does not create or manage that group independently.
 
+When `deployment_in_vnet = true`, Terraform also looks up an existing VNet
+named `vnet-nucleus-dev-swec-001`. Terraform does not create, retag, or change
+the VNet address space. It only creates subnets, Private DNS zones, Private
+Endpoints, and network settings inside or alongside that existing VNet.
+
 The existing resource group's `env=dev` governance tag is included in the
 common Terraform tag map so plans converge without attempting to remove a tag
 inherited through Azure governance.
 
-## Connectivity and identity
+## Connectivity modes
 
-The dev environment deliberately starts with public service endpoints:
+### Public mode: `deployment_in_vnet = false`
+
+This preserves the original public/bootstrap behavior. Override
+`deployment_in_vnet = false` when you explicitly want the older public shape.
 
 - AKS uses a public API and a Standard public load balancer with one managed
   outbound IP.
@@ -63,6 +79,51 @@ The dev environment deliberately starts with public service endpoints:
   `0.0.0.0` service rule. Optional operator IP ranges can be added in the dev
   tfvars file.
 - ACR, Key Vault, AI Search, Storage, and Foundry expose public endpoints.
+
+No VNet data source, subnets, Private DNS zones, Private Endpoints, or reserved
+future ingress IP are created in this mode.
+
+### Secure VNet mode: `deployment_in_vnet = true`
+
+Before enabling this mode, create the VNet manually:
+
+```bash
+az network vnet create \
+  --resource-group nucleus_swec_dev-rg \
+  --location swedencentral \
+  --name vnet-nucleus-dev-swec-001 \
+  --address-prefixes 10.80.0.0/16
+```
+
+Terraform then creates these subnets inside that VNet:
+
+| Subnet | CIDR | Purpose |
+|---|---:|---|
+| `snet-aks-nucleus-dev-swec-001` | `10.80.0.0/22` | AKS nodes |
+| `snet-postgres-nucleus-dev-swec-001` | `10.80.4.0/24` | PostgreSQL Flexible Server delegated subnet |
+| `snet-private-endpoints-nucleus-dev-swec-001` | `10.80.5.0/24` | Private Endpoints |
+| `snet-admin-nucleus-dev-swec-001` | `10.80.6.0/24` | Reserved for future admin tooling |
+
+In VNet mode:
+
+- AKS is rebuilt with its default node pool in the AKS subnet.
+- AKS API access is restricted to `20.250.178.236/32`.
+- PostgreSQL is rebuilt with private VNet integration and public network access
+  disabled.
+- ACR is upgraded to Premium so Private Link can be used.
+- Private Endpoints and Private DNS zones are created for ACR, Key Vault,
+  Storage Blob, Azure AI Search, and Foundry/Cognitive Services.
+- Remaining public data-plane access for local administration is restricted to
+  the trusted public IP list.
+- A Standard static public IP can be reserved in the AKS node resource group for
+  a future allowlisted NGINX ingress when `enable_future_nginx_ingress_ip` is
+  enabled. Dev keeps this disabled because it is not needed for the current
+  ClusterIP plus port-forward access path.
+
+Switching modes can replace AKS and PostgreSQL. This is acceptable for dev, but
+it means data must be repopulated after a VNet-mode rebuild.
+
+## Identity
 
 AKS uses OIDC and workload identity. The runtime identity can read model,
 search, blob, and secret data. The indexer identity can additionally update
@@ -92,6 +153,15 @@ terraform -chdir=infra/terraform plan \
 terraform -chdir=infra/terraform apply dev.tfplan
 ```
 
+To preview public mode while `dev.tfvars` is set to private mode, override the
+switch:
+
+```bash
+terraform -chdir=infra/terraform plan \
+  -var-file=environments/dev/terraform.tfvars \
+  -var='deployment_in_vnet=false'
+```
+
 To remove only Terraform-managed resources, first create and review a destroy
 plan, then apply that saved plan. The existing `nucleus_swec_dev-rg` resource
 group is a data source and is therefore not part of the destroy plan.
@@ -114,8 +184,7 @@ and subscription. The dev tfvars selects `gpt-5-mini` with
 
 ## Intentionally deferred
 
-To keep dev small, this baseline does not create private endpoints, Private
-DNS zones, Azure Firewall, NAT Gateway, Front Door, API Management, managed
-Prometheus, Grafana, zone-redundant database compute, or a remote Terraform
-state account. Those are hardening and scale steps, not prerequisites for the
-first deployment.
+This root still does not create Azure Firewall, NAT Gateway, Front Door, API
+Management, managed Prometheus, Grafana, zone-redundant database compute, or a
+remote Terraform state account. Those are hardening and scale steps beyond the
+optional VNet/Private Link deployment.

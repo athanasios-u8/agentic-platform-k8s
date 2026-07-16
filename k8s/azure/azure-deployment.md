@@ -52,6 +52,8 @@ PATH=/private/tmp/aks-tools:$PATH kubectl get crd | grep kaos
 helm upgrade --install kaos-operator ../kaos/operator/chart \
   -n kaos-system \
   --create-namespace \
+  --set defaultImages.litellm=acrnucleusdevswec001.azurecr.io/bookstore/litellm:main-stable \
+  --set defaultImages.ollama=acrnucleusdevswec001.azurecr.io/bookstore/ollama:latest \
   --wait \
   --timeout 5m
 ```
@@ -111,6 +113,13 @@ docker buildx build \
   --push frontend
 ```
 
+Mirror runtime images that the cluster needs before enabling VNet-restricted
+deployment:
+
+```bash
+k8s/azure/scripts/mirror-runtime-images.sh
+```
+
 The final backend image digest rolled out during the dev deployment was:
 
 ```text
@@ -118,6 +127,48 @@ sha256:12044ee74e3e17048fff24bd123ecd281ac078b60c2bfdcb196a857157fe0eae
 ```
 
 ## Deploy application manifests
+
+## Optional secure VNet mode
+
+Create the existing VNet input before setting `deployment_in_vnet = true`:
+
+```bash
+az network vnet create \
+  --resource-group nucleus_swec_dev-rg \
+  --location swedencentral \
+  --name vnet-nucleus-dev-swec-001 \
+  --address-prefixes 10.80.0.0/16
+```
+
+Confirm it exists:
+
+```bash
+az network vnet show \
+  --resource-group nucleus_swec_dev-rg \
+  --name vnet-nucleus-dev-swec-001 \
+  --query "{name:name,addressSpace:addressSpace.addressPrefixes,location:location}"
+```
+
+Public mode preview:
+
+```bash
+terraform -chdir=infra/terraform plan \
+  -var-file=environments/dev/terraform.tfvars \
+  -var='deployment_in_vnet=false'
+```
+
+Secure VNet mode, using the checked-in dev tfvars:
+
+```bash
+terraform -chdir=infra/terraform plan \
+  -var-file=environments/dev/terraform.tfvars
+```
+
+In VNet mode, AKS and PostgreSQL are rebuilt and the PostgreSQL and AI Search
+population jobs must be rerun. The frontend remains private; use port-forward
+for now. A future NGINX ingress can reserve a Terraform-managed public IP when
+`enable_future_nginx_ingress_ip` is enabled and should use
+`loadBalancerSourceRanges: ["20.250.178.236/32"]`.
 
 ```bash
 PATH=/private/tmp/aks-tools:$PATH kubectl apply -k k8s/azure/dev
@@ -163,12 +214,10 @@ k8s/azure/scripts/populate-ai-search.sh \
   --yes
 ```
 
-The Search population Job reads the PostgreSQL catalog, generates synthetic
-reviews with the Azure Foundry deployment, creates or updates the Search index,
-and uploads review documents with the `nucleus-indexer` workload identity.
-
-For dev, the job currently generates 3-5 reviews for the first 8 books so the
-run finishes quickly on the small Foundry deployment.
+The dev Search population Job creates or updates the Search index and uploads
+the checked-in synthetic review seed data from
+`data/book_reviews/book_reviews.jsonl` with the `nucleus-indexer` workload
+identity. This uploaded 489 review documents during the private VNet deployment.
 
 ## Azure AI Search managed identity auth fix
 

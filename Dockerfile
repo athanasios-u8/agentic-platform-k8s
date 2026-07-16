@@ -16,6 +16,7 @@ RUN uv sync --frozen --no-dev --no-install-project --no-cache
 
 COPY src ./src
 COPY scripts ./scripts
+COPY data ./data
 COPY docker/entrypoint.sh ./docker/entrypoint.sh
 
 RUN uv sync --frozen --no-dev --no-cache \

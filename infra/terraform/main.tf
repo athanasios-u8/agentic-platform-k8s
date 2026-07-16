@@ -26,10 +26,19 @@ resource "azurerm_container_registry" "main" {
   name                          = local.names.container_registry
   resource_group_name           = data.azurerm_resource_group.main.name
   location                      = data.azurerm_resource_group.main.location
-  sku                           = "Basic"
+  sku                           = local.deployment_in_vnet ? "Premium" : "Basic"
   admin_enabled                 = false
   public_network_access_enabled = true
-  tags                          = local.tags
+  network_rule_set = local.deployment_in_vnet ? [{
+    default_action = "Deny"
+    ip_rule = [
+      for cidr in var.trusted_public_ip_cidrs : {
+        action   = "Allow"
+        ip_range = cidr
+      }
+    ]
+  }] : []
+  tags = local.tags
 }
 
 resource "azurerm_storage_account" "main" {
@@ -46,6 +55,16 @@ resource "azurerm_storage_account" "main" {
   default_to_oauth_authentication = true
   allow_nested_items_to_be_public = false
   tags                            = local.tags
+
+  dynamic "network_rules" {
+    for_each = local.deployment_in_vnet ? [1] : []
+
+    content {
+      default_action = "Deny"
+      bypass         = ["AzureServices"]
+      ip_rules       = local.trusted_public_ip_rules
+    }
+  }
 
   blob_properties {
     versioning_enabled = true
@@ -77,6 +96,16 @@ resource "azurerm_key_vault" "main" {
   purge_protection_enabled      = false
   soft_delete_retention_days    = 7
   tags                          = local.tags
+
+  dynamic "network_acls" {
+    for_each = local.deployment_in_vnet ? [1] : []
+
+    content {
+      bypass         = "AzureServices"
+      default_action = "Deny"
+      ip_rules       = local.trusted_public_ip_rules
+    }
+  }
 }
 
 resource "azurerm_role_assignment" "terraform_key_vault_secrets_officer" {
@@ -111,7 +140,9 @@ resource "azurerm_postgresql_flexible_server" "main" {
   version                       = var.postgresql_version
   administrator_login           = var.postgresql_admin_username
   administrator_password        = random_password.postgresql_admin.result
-  public_network_access_enabled = true
+  delegated_subnet_id           = local.deployment_in_vnet ? azurerm_subnet.postgres[0].id : null
+  private_dns_zone_id           = local.deployment_in_vnet ? azurerm_private_dns_zone.private_link["postgresql"].id : null
+  public_network_access_enabled = !local.deployment_in_vnet
   sku_name                      = var.postgresql_sku_name
   storage_mb                    = var.postgresql_storage_mb
   auto_grow_enabled             = true
@@ -128,6 +159,8 @@ resource "azurerm_postgresql_flexible_server" "main" {
   lifecycle {
     ignore_changes = [zone]
   }
+
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.private_link]
 }
 
 resource "azurerm_postgresql_flexible_server_database" "bookstore" {
@@ -149,6 +182,7 @@ resource "azurerm_postgresql_flexible_server_database" "langfuse" {
 # fixed egress IP. Replace it with explicit egress ranges when networking is
 # hardened.
 resource "azurerm_postgresql_flexible_server_firewall_rule" "azure_services" {
+  count            = local.deployment_in_vnet ? 0 : 1
   name             = local.names.postgres_azure_firewall
   server_id        = azurerm_postgresql_flexible_server.main.id
   start_ip_address = "0.0.0.0"
@@ -156,7 +190,7 @@ resource "azurerm_postgresql_flexible_server_firewall_rule" "azure_services" {
 }
 
 resource "azurerm_postgresql_flexible_server_firewall_rule" "operator" {
-  for_each = var.postgresql_operator_firewall_rules
+  for_each = local.deployment_in_vnet ? {} : var.postgresql_operator_firewall_rules
 
   name             = each.key
   server_id        = azurerm_postgresql_flexible_server.main.id
@@ -174,6 +208,7 @@ resource "azurerm_search_service" "main" {
   authentication_failure_mode   = "http401WithBearerChallenge"
   local_authentication_enabled  = true
   public_network_access_enabled = true
+  allowed_ips                   = local.deployment_in_vnet ? local.trusted_public_ip_rules : []
   tags                          = local.tags
 }
 
@@ -193,11 +228,21 @@ resource "azapi_resource" "foundry" {
     sku = {
       name = "S0"
     }
-    properties = {
+    properties = merge({
       allowProjectManagement = true
       customSubDomainName    = local.names.foundry_account
       publicNetworkAccess    = "Enabled"
-    }
+      }, local.deployment_in_vnet ? {
+      networkAcls = {
+        defaultAction       = "Deny"
+        virtualNetworkRules = []
+        ipRules = [
+          for ip_rule in local.trusted_public_ip_rules : {
+            value = ip_rule
+          }
+        ]
+      }
+    } : {})
   }
 }
 

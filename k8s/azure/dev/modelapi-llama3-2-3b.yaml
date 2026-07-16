@@ -10,6 +10,7 @@ metadata:
   namespace: nucleus
 spec:
   container:
+    image: acrnucleusdevswec001.azurecr.io/bookstore/ollama:latest
     resources:
       limits:
         cpu: '2'

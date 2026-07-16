@@ -10,6 +10,7 @@ metadata:
   namespace: nucleus
 spec:
   container:
+    image: acrnucleusdevswec001.azurecr.io/bookstore/litellm:main-stable
     env:
     - name: LITELLM_LOG
       value: INFO
@@ -36,6 +37,8 @@ spec:
         value: https://login.microsoftonline.com/
       - name: AZURE_SCOPE
         value: https://cognitiveservices.azure.com/.default
+      - name: AZURE_TOKEN_CREDENTIALS
+        value: WorkloadIdentityCredential
       name: model-api
       volumeMounts:
       - mountPath: "/var/run/secrets/azure/tokens"
@@ -53,8 +56,16 @@ spec:
             path: azure-identity-token
   proxyConfig:
     configYaml:
-      fromSecretKeyRef:
-        key: config.yaml
-        name: azure-foundry-litellm
+      fromString: |
+        model_list:
+          - model_name: gpt-5-mini
+            litellm_params:
+              model: azure/model-nucleus-dev-swec-001
+              api_base: https://aif-nucleus-dev-swec-001.cognitiveservices.azure.com
+              api_version: 2025-04-01-preview
+        litellm_settings:
+          enable_azure_ad_token_refresh: true
+          drop_params: true
+          request_timeout: 120
     models:
     - gpt-5-mini

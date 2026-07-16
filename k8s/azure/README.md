@@ -37,6 +37,7 @@ k8s/azure/
 │   ├── job.yaml                   # Complete AI Search population Job
 │   └── kustomization.yaml         # resources list only
 └── scripts/
+    ├── mirror-runtime-images.sh
     ├── populate-postgres.sh
     └── populate-ai-search.sh
 ```
@@ -66,6 +67,20 @@ Application workloads that use the mutable `dev` image tag set
 `imagePullPolicy: Always` in the dev manifests. This keeps Azure iteration
 predictable after a new image is pushed. For staging and production, prefer
 immutable tags or digests and switch back to `IfNotPresent` if desired.
+
+The KAOS LiteLLM ModelAPI, Ollama ModelAPI, and Key Vault bootstrap workloads
+also use ACR-hosted runtime images:
+
+- `acrnucleusdevswec001.azurecr.io/bookstore/litellm:main-stable`
+- `acrnucleusdevswec001.azurecr.io/bookstore/ollama:latest`
+- `acrnucleusdevswec001.azurecr.io/bookstore/busybox:1.36.1`
+
+Mirror those images into ACR before enabling `deployment_in_vnet = true` and
+restricting public dependency paths.
+
+```bash
+k8s/azure/scripts/mirror-runtime-images.sh
+```
 
 ## Identities and secrets
 
@@ -131,14 +146,14 @@ completion, and prints all container logs.
 
 ## Populate Azure AI Search
 
-Run AI Search population after PostgreSQL population. The Job reads the catalog
-from PostgreSQL, generates synthetic reviews per book with Foundry, creates or
-updates the Search index, and uploads the review documents using the indexer
-workload identity. The dev Job currently generates 3–5 reviews for the first 8
-books so it finishes quickly on the small dev Foundry deployment; larger
-environments can raise `BOOK_REVIEW_MIN_REVIEWS`,
-`BOOK_REVIEW_MAX_REVIEWS`, and `BOOK_REVIEW_MAX_BOOKS` in their copied
-manifests.
+Run AI Search population after PostgreSQL population. The dev Job creates or
+updates the Search index and uploads the checked-in synthetic review seed file
+from `data/book_reviews/book_reviews.jsonl` using the indexer workload identity.
+This keeps dev population deterministic and avoids coupling deployment to live
+review generation. Future environment overlays can switch back to Foundry-backed
+generation by running `bookstore-ai-search rebuild` and setting
+`BOOK_REVIEW_MIN_REVIEWS`, `BOOK_REVIEW_MAX_REVIEWS`, and
+`BOOK_REVIEW_MAX_BOOKS`.
 
 Render the full dev Job locally:
 
@@ -154,13 +169,13 @@ k8s/azure/scripts/populate-ai-search.sh --environment dev
 
 The helper verifies the PostgreSQL Secret and the annotated
 `nucleus-indexer` ServiceAccount. It requires environment confirmation because
-generation consumes Foundry capacity and the upload changes Search data. The
-Job has no automatic retry, avoiding repeated model generation after a failure.
+the upload changes Search data and some overlays may consume Foundry capacity.
+The Job has no automatic retry, avoiding repeated uploads or model generation
+after a failure.
 
-Generated JSONL exists only in an ephemeral Job volume. Upload uses stable
-review IDs and upserts matching documents; it does not delete the Search index
-first. Catalog entries removed in a later dataset need explicit Search cleanup
-if exact replacement is required.
+Upload uses stable review IDs and upserts matching documents; it does not delete
+the Search index first. Catalog entries removed in a later dataset need explicit
+Search cleanup if exact replacement is required.
 
 ## Add staging and production
 

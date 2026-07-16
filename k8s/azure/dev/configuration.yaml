@@ -59,7 +59,7 @@ stringData:
       - model_name: gpt-5-mini
         litellm_params:
           model: azure/model-nucleus-dev-swec-001
-          api_base: https://aif-nucleus-dev-swec-001.openai.azure.com
+          api_base: https://aif-nucleus-dev-swec-001.cognitiveservices.azure.com
           api_version: 2025-04-01-preview
           azure_scope: https://cognitiveservices.azure.com/.default
     litellm_settings:

@@ -316,8 +316,9 @@ kubectl kustomize k8s/azure/dev > /tmp/nucleus-azure-dev.yaml
 ```
 
 Azure PostgreSQL population is kept out of that bundle because it truncates and
-reseeds the demo tables. AI Search population is also separate because it runs
-Foundry generation and changes Search data. Both dev Jobs can be rendered
+reseeds the demo tables. AI Search population is also separate because it
+changes Search data; the dev job uploads the checked-in synthetic review seed
+file from `data/book_reviews/book_reviews.jsonl`. Both dev Jobs can be rendered
 safely:
 
 ```bash

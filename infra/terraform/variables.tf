@@ -55,6 +55,60 @@ variable "node_resource_group_instance" {
   }
 }
 
+variable "deployment_in_vnet" {
+  description = "True enables secure deployment into an existing VNet. False keeps the public deployment."
+  type        = bool
+  default     = true
+}
+
+variable "existing_vnet_name" {
+  description = "Name of the manually-created VNet used when deployment_in_vnet is true."
+  type        = string
+  default     = "vnet-nucleus-dev-swec-001"
+}
+
+variable "existing_vnet_resource_group_name" {
+  description = "Resource group of the manually-created VNet used when deployment_in_vnet is true."
+  type        = string
+  default     = "nucleus_swec_dev-rg"
+}
+
+variable "trusted_public_ip_cidrs" {
+  description = "Public CIDRs allowed to reach admin/data-plane endpoints when deployment_in_vnet is true."
+  type        = list(string)
+  default     = ["20.250.178.236/32"]
+}
+
+variable "vnet_aks_subnet_cidr" {
+  description = "CIDR for the AKS subnet created inside the existing VNet when deployment_in_vnet is true."
+  type        = string
+  default     = "10.80.0.0/22"
+}
+
+variable "vnet_postgres_subnet_cidr" {
+  description = "CIDR for the PostgreSQL delegated subnet created inside the existing VNet when deployment_in_vnet is true."
+  type        = string
+  default     = "10.80.4.0/24"
+}
+
+variable "vnet_private_endpoints_subnet_cidr" {
+  description = "CIDR for the Private Endpoints subnet created inside the existing VNet when deployment_in_vnet is true."
+  type        = string
+  default     = "10.80.5.0/24"
+}
+
+variable "vnet_admin_subnet_cidr" {
+  description = "CIDR reserved for future private admin tooling when deployment_in_vnet is true."
+  type        = string
+  default     = "10.80.6.0/24"
+}
+
+variable "enable_future_nginx_ingress_ip" {
+  description = "Create a reserved static public IP in the AKS node resource group for future allowlisted NGINX ingress when deployment_in_vnet is true."
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Additional tags merged with the mandatory workload tags."
   type        = map(string)

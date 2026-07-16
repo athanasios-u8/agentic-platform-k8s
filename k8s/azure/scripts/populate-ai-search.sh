@@ -5,8 +5,9 @@ usage() {
   cat <<'EOF'
 Usage: populate-ai-search.sh [--environment ENV] [--yes] [--render] [--timeout DURATION]
 
-Creates a one-off Kubernetes Job that reads the PostgreSQL catalog, generates
-synthetic reviews with Microsoft Foundry, and creates/updates Azure AI Search.
+Creates a one-off Kubernetes Job that creates/updates Azure AI Search and
+populates the review index. Environment overlays may either generate reviews
+with Microsoft Foundry or upload checked-in synthetic review seed data.
 
 Options:
   -e, --environment ENV  Environment overlay to use (default: dev)
@@ -114,8 +115,9 @@ echo "Kubernetes context: $current_context"
 echo "Namespace: $namespace"
 echo "Job: $job_name"
 echo
-echo "WARNING: this operation invokes the configured Foundry model and upserts"
-echo "synthetic review documents into the environment's Azure AI Search index."
+echo "WARNING: this operation upserts synthetic review documents into the"
+echo "environment's Azure AI Search index. Some environment overlays may also"
+echo "invoke the configured Foundry model during population."
 
 if [[ "$assume_yes" != "true" ]]; then
   if [[ ! -t 0 ]]; then
