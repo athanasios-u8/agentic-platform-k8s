@@ -138,7 +138,25 @@ k8s/azure/observability/dev/deploy.sh
 
 This installs pinned Langfuse chart `1.5.39` with the managed Azure PostgreSQL
 `langfuse` database and applies the Azure-owned Tempo, Grafana, and Collector
-manifests. It does not read the local `k8s/observability` directory.
+manifests. The bundled ClickHouse instance uses the chart's `2xlarge` resource
+preset (3 GiB memory request and 12 GiB limit), while Langfuse raw event and
+media objects use the Terraform-managed Azure Blob `langfuse` container.
+Bundled MinIO and batch export are disabled. The helper applies 30-day TTLs to
+the ClickHouse observability tables; Azure lifecycle management separately
+expires matching Blob objects after 30 days. It does not read the local
+`k8s/observability` directory.
+
+The one-time clean cutover intentionally discards the existing ClickHouse,
+Redis, and MinIO data without migration while preserving PostgreSQL users,
+projects, settings, and API keys:
+
+```bash
+k8s/azure/observability/dev/deploy.sh --reset-langfuse-data
+```
+
+This option is destructive and irreversible. Normal runs without the flag do
+not delete PVCs. If a reset is interrupted, rerun the same command after the
+Terraform Blob container and Key Vault secret have been applied.
 
 ## Optional secure VNet mode
 

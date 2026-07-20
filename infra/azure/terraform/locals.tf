@@ -24,6 +24,8 @@ locals {
     search                     = "srch-${local.suffix}"
     storage_account            = replace("sa-${local.suffix}", "-", "")
     review_container           = "blob-${local.suffix}"
+    langfuse_container         = "langfuse"
+    langfuse_storage_secret    = "sec-langfuse-blob-${local.suffix}"
     foundry_account            = "aif-${local.suffix}"
     foundry_project            = "proj-${local.suffix}"
     foundry_model_deployment   = "model-${local.suffix}"

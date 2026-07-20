@@ -81,6 +81,18 @@ output "review_storage_blob_endpoint" {
   value = azurerm_storage_account.main.primary_blob_endpoint
 }
 
+output "langfuse_storage_container_name" {
+  value = azurerm_storage_container.langfuse.name
+}
+
+output "langfuse_storage_blob_endpoint" {
+  value = azurerm_storage_account.main.primary_blob_endpoint
+}
+
+output "langfuse_storage_key_secret_id" {
+  value = azurerm_key_vault_secret.langfuse_blob_storage_key.versionless_id
+}
+
 output "foundry_account_name" {
   value = azapi_resource.foundry.name
 }

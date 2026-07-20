@@ -85,6 +85,44 @@ resource "azurerm_storage_container" "reviews" {
   container_access_type = "private"
 }
 
+resource "azurerm_storage_container" "langfuse" {
+  name                  = local.names.langfuse_container
+  storage_account_id    = azurerm_storage_account.main.id
+  container_access_type = "private"
+}
+
+resource "azurerm_storage_management_policy" "main" {
+  storage_account_id = azurerm_storage_account.main.id
+
+  rule {
+    name    = "expire-langfuse-dev-observability"
+    enabled = true
+
+    filters {
+      prefix_match = [
+        "${local.names.langfuse_container}/events/",
+        "${local.names.langfuse_container}/media/",
+        "${local.names.langfuse_container}/otel/",
+      ]
+      blob_types = ["blockBlob"]
+    }
+
+    actions {
+      base_blob {
+        delete_after_days_since_modification_greater_than = 30
+      }
+
+      snapshot {
+        delete_after_days_since_creation_greater_than = 7
+      }
+
+      version {
+        delete_after_days_since_creation = 7
+      }
+    }
+  }
+}
+
 resource "azurerm_key_vault" "main" {
   name                          = local.names.key_vault
   location                      = data.azurerm_resource_group.main.location
@@ -128,6 +166,16 @@ resource "azurerm_key_vault_secret" "postgresql_admin_password" {
   value        = random_password.postgresql_admin.result
   key_vault_id = azurerm_key_vault.main.id
   content_type = "PostgreSQL administrator password"
+  tags         = local.tags
+
+  depends_on = [azurerm_role_assignment.terraform_key_vault_secrets_officer]
+}
+
+resource "azurerm_key_vault_secret" "langfuse_blob_storage_key" {
+  name         = local.names.langfuse_storage_secret
+  value        = azurerm_storage_account.main.primary_access_key
+  key_vault_id = azurerm_key_vault.main.id
+  content_type = "Azure Blob Storage account key for Langfuse"
   tags         = local.tags
 
   depends_on = [azurerm_role_assignment.terraform_key_vault_secrets_officer]
@@ -213,7 +261,7 @@ resource "azurerm_search_service" "main" {
 }
 
 resource "azapi_resource" "foundry" {
-  type      = "Microsoft.CognitiveServices/accounts@2025-06-01"
+  type      = "Microsoft.CognitiveServices/accounts@2025-10-01-preview"
   name      = local.names.foundry_account
   parent_id = data.azurerm_resource_group.main.id
   location  = data.azurerm_resource_group.main.location
@@ -244,10 +292,16 @@ resource "azapi_resource" "foundry" {
       }
     } : {})
   }
+
+  lifecycle {
+    # Azure populates project associations and other read-only properties in
+    # the account body. Preserve those service-owned values after import.
+    ignore_changes = [body, identity]
+  }
 }
 
 resource "azapi_resource" "foundry_project" {
-  type      = "Microsoft.CognitiveServices/accounts/projects@2025-06-01"
+  type      = "Microsoft.CognitiveServices/accounts/projects@2025-10-01-preview"
   name      = local.names.foundry_project
   parent_id = azapi_resource.foundry.id
   location  = data.azurerm_resource_group.main.location
@@ -262,6 +316,11 @@ resource "azapi_resource" "foundry_project" {
       displayName = "Nucleus ${upper(var.environment)}"
       description = "Nucleus agentic platform ${var.environment} project"
     }
+  }
+
+  lifecycle {
+    # Azure adds default-project and endpoint metadata to the response body.
+    ignore_changes = [body, identity]
   }
 }
 

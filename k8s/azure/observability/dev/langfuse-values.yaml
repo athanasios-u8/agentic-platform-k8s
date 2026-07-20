@@ -90,7 +90,7 @@ postgresql:
 clickhouse:
   replicaCount: 1
   clusterEnabled: false
-  resourcesPreset: small
+  resourcesPreset: 2xlarge
   persistence:
     size: 10Gi
   auth:
@@ -116,16 +116,24 @@ redis:
         memory: 512Mi
 
 s3:
-  persistence:
-    size: 5Gi
-  resources:
-    requests:
-      cpu: 50m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 1Gi
-  auth:
-    existingSecret: langfuse-runtime-secrets
-    rootUserSecretKey: minio-root-user
-    rootPasswordSecretKey: minio-root-password
+  deploy: false
+  storageProvider: azure
+  bucket: langfuse
+  endpoint: https://sanucleusdevswec001.blob.core.windows.net
+  forcePathStyle: false
+  accessKeyId:
+    secretKeyRef:
+      name: langfuse-blob-storage
+      key: account-name
+  secretAccessKey:
+    secretKeyRef:
+      name: langfuse-blob-storage
+      key: account-key
+  eventUpload:
+    prefix: events/
+  batchExport:
+    enabled: false
+    prefix: exports/
+  mediaUpload:
+    enabled: true
+    prefix: media/

@@ -40,6 +40,7 @@ k8s/azure/
 │   ├── namespace.yaml             # Azure dev monitoring namespace
 │   ├── langfuse-values.yaml       # Azure dev Langfuse Helm values
 │   ├── runtime-secrets.example.yaml # Shape only; excluded from deployment
+│   ├── blob-storage-secret.example.yaml # Azure Blob Secret shape only
 │   ├── tempo-*.yaml               # Azure-owned Tempo resources
 │   ├── grafana-*.yaml             # Azure-owned Grafana resources
 │   ├── otel-collector-*.yaml      # Azure-owned Collector resources
@@ -151,16 +152,38 @@ kubectl apply -k k8s/azure/dev
 ```
 
 The helper accepts only the `aks-nucleus-dev-swec-001` context. It reuses an
-existing `langfuse-runtime-secrets` Secret. On a first deployment, it reads only
-the PostgreSQL administrator password from Azure Key Vault, generates the
-remaining Langfuse, ClickHouse, Redis, and MinIO credentials, creates the
-URL-encoded PostgreSQL connection Secret, and installs pinned Langfuse chart
-`1.5.39`. No secret value is stored in Git.
+existing `langfuse-runtime-secrets` Secret. On a first deployment, it reads the
+PostgreSQL and Azure Blob credentials from Azure Key Vault, generates the
+remaining Langfuse, ClickHouse, and Redis credentials, creates the URL-encoded
+PostgreSQL connection and `langfuse-blob-storage` Secrets, and installs pinned
+Langfuse chart `1.5.39`. No secret value is stored in Git.
 
 The Azure values use the Terraform-provisioned `langfuse` database on Azure
-PostgreSQL and resource-sized in-cluster ClickHouse, Redis, and MinIO instances
-for dev. Tempo stores 24 hours of traces on ephemeral storage; this is a dev
-retention choice, not a production durability design.
+PostgreSQL, an in-cluster ClickHouse and Redis, and the private `langfuse`
+container in Azure Blob Storage. Bundled MinIO and batch export are disabled.
+ClickHouse uses the chart's `2xlarge` resource preset, which renders a 3 GiB
+memory request and 12 GiB limit. The deployment helper reconciles 30-day TTLs
+on the ClickHouse `traces`, `observations`, `scores`, and
+`blob_storage_file_log` tables. Azure lifecycle management independently
+deletes event, media, and legacy OTEL blobs after 30 days and their versions and
+snapshots after 7 days. Tempo stores 24 hours of traces on ephemeral storage.
+
+### Destructive clean reset
+
+Normal deployment is non-destructive. To discard the disposable development
+telemetry and remove the previous MinIO storage, run:
+
+```bash
+k8s/azure/observability/dev/deploy.sh --reset-langfuse-data
+```
+
+The reset uninstalls the Helm release, deletes its ClickHouse, Redis, and legacy
+MinIO PVCs, removes the obsolete MinIO secret keys, and performs a clean Helm
+installation backed by Azure Blob. It deliberately preserves the external
+Azure PostgreSQL database, including users, projects, settings, and API keys.
+Existing traces and files are not migrated and cannot be recovered. If the
+reset is interrupted, rerun the same command; the operations and Secret
+reconciliation are idempotent.
 
 Use ClusterIP port-forwards for the private UIs:
 

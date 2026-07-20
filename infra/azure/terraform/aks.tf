@@ -81,13 +81,21 @@ resource "azurerm_kubernetes_cluster" "main" {
   }
 
   tags = local.tags
+
+  lifecycle {
+    # The cluster autoscaler owns the current count between min_count and
+    # max_count. Defender is enabled by subscription governance.
+    ignore_changes = [
+      default_node_pool[0].node_count,
+      microsoft_defender,
+    ]
+  }
 }
 
 resource "azurerm_role_assignment" "aks_acr_pull" {
-  scope                            = azurerm_container_registry.main.id
-  role_definition_name             = "AcrPull"
-  principal_id                     = azurerm_kubernetes_cluster.main.kubelet_identity[0].object_id
-  skip_service_principal_aad_check = true
+  scope                = azurerm_container_registry.main.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_kubernetes_cluster.main.kubelet_identity[0].object_id
 }
 
 resource "azurerm_role_assignment" "terraform_aks_cluster_admin" {

@@ -44,7 +44,8 @@ published abbreviation exists.
 | Relational data | Azure Database for PostgreSQL Flexible Server | `psql-nucleus-dev-swec-001`, burstable compute |
 | Databases | PostgreSQL databases | `bookstore` and `langfuse` |
 | Search | Azure AI Search | `srch-nucleus-dev-swec-001`, Basic |
-| Object storage | Storage account and private blob container | `sanucleusdevswec001` / `blob-nucleus-dev-swec-001` |
+| Object storage | Storage account and private blob containers | `sanucleusdevswec001` / `blob-nucleus-dev-swec-001` and `langfuse` |
+| Object lifecycle | Langfuse development retention policy | Event, media, and legacy OTEL blobs expire after 30 days; versions and snapshots after 7 days |
 | AI | Microsoft Foundry account | `aif-nucleus-dev-swec-001` |
 | AI | Microsoft Foundry project and model deployment | `proj-nucleus-dev-swec-001` / `model-nucleus-dev-swec-001` |
 | Observability | Log Analytics and Application Insights | `log-nucleus-dev-swec-001` / `appi-nucleus-dev-swec-001` |
@@ -130,6 +131,11 @@ search, blob, and secret data. The indexer identity can additionally update
 search indexes and blob data. The AKS kubelet identity receives `AcrPull`.
 Terraform generates the PostgreSQL administrator password and stores it in Key
 Vault as `sec-nucleus-dev-swec-001`; no secret is committed to the tfvars file.
+Terraform also stores the Storage account key required by Langfuse in Key Vault
+as `sec-langfuse-blob-nucleus-dev-swec-001`. The Kubernetes deployment helper
+copies that credential into the `monitoring/langfuse-blob-storage` Secret at
+deployment time. The private `langfuse` container replaces the development
+cluster's former MinIO dependency.
 
 Local authentication remains enabled for Storage and AI Search during the
 bootstrap phase because local repository tooling still supports keys. AI Search
@@ -177,6 +183,11 @@ terraform -chdir=infra/azure/terraform apply dev-destroy.tfplan
 The current bootstrap uses local Terraform state. Do not commit state or plan
 files. Move state to a separately managed remote backend before multiple people
 or CI systems apply this configuration.
+
+If the local state is lost while the Azure resources still exist, do not apply
+an empty-state plan. Recover the state backup or import every existing resource
+first, and proceed only after the plan shows no attempt to recreate or replace
+the existing foundation.
 
 Foundry model availability, deployment SKU support, and quota vary by region
 and subscription. The dev tfvars selects `gpt-5-mini` with
