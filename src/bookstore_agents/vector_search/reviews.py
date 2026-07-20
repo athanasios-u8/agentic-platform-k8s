@@ -7,8 +7,8 @@ from typing import Any, Literal, cast
 from openai import AsyncAzureOpenAI, AsyncOpenAI
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from bookstore_agents.azure_ai_search.catalog import BookRecord, list_books
 from bookstore_agents.common.config import get_settings
+from bookstore_agents.vector_search.catalog import BookRecord, list_books
 
 Sentiment = Literal["positive", "negative", "neutral"]
 SentimentProfile = Literal["positive-heavy", "balanced", "negative-heavy"]

@@ -116,8 +116,23 @@ contacting or changing a cluster:
 
 ```bash
 kubectl kustomize k8s/azure/dev > /tmp/nucleus-azure-dev.yaml
+kubectl kustomize k8s/azure/observability/dev > /tmp/nucleus-azure-observability-dev.yaml
+helm template langfuse langfuse/langfuse \
+  --version 1.5.39 \
+  --namespace monitoring \
+  -f k8s/azure/observability/dev/langfuse-values.yaml \
+  > /tmp/nucleus-azure-langfuse-dev.yaml
 k8s/azure/scripts/populate-postgres.sh --environment dev --render
 k8s/azure/scripts/populate-ai-search.sh --environment dev --render
+```
+
+Deploy Azure observability before the Azure application. The helper is scoped
+to the dev AKS context, keeps generated credentials out of the repository, and
+uses the Azure PostgreSQL `langfuse` database:
+
+```bash
+k8s/azure/observability/dev/deploy.sh
+kubectl apply -k k8s/azure/dev
 ```
 
 After the Azure application prerequisites and backend image exist, populate
@@ -154,10 +169,9 @@ make docker-build-all-images \
   IMAGE_TAG=0.1.0
 ```
 
-For KAOS, put `OPENAI_API_KEY`, `TAVILY_API_KEY`,
-`AZURE_AI_SEARCH_ENDPOINT`, and at least one Azure AI Search key in the
-environment or in `.LOCAL_KEYS`. The checked-in `k8s/kaos/secrets.yaml`
-intentionally contains placeholders.
+For KAOS, put `OPENAI_API_KEY`, `TAVILY_API_KEY`, and the selected vector-search
+provider's endpoint and credentials in the environment or in `.LOCAL_KEYS`.
+The checked-in `k8s/kaos/secrets.yaml` intentionally contains placeholders.
 
 ```bash
 # Recommended one-shot KAOS apply from the repo root.
@@ -226,10 +240,10 @@ MCP servers, agents, gateway, Postgres, Ollama, the model-pull Job, Upcoming
 Releases MCP, Release Scout, and Review Summarizer as regular Kubernetes
 resources. It does not include a plain Kubernetes browser frontend manifest.
 
-Set `AZURE_AI_SEARCH_ENDPOINT` and at least one Azure AI Search key in
-`bookstore-secrets` before expecting Review Summarizer to retrieve live indexed
-reviews. Apply `bookstore-config` before the review summarizer workload because
-the Agent reads `AZURE_AI_SEARCH_INDEX_NAME` and `BOOK_REVIEW_SEARCH_TOP_K`.
+Set `BOOK_REVIEW_SEARCH_PROVIDER` and the selected provider's endpoint and
+credentials before expecting Review Summarizer to retrieve live indexed reviews.
+Apply `bookstore-config` before the review summarizer workload because the Agent
+reads the provider-specific index name and `BOOK_REVIEW_SEARCH_TOP_K`.
 
 ```bash
 # Apply and inspect the plain Kubernetes stack
@@ -242,6 +256,8 @@ kubectl -n bookstore port-forward svc/frontend-gateway 8300:8300
 ```
 
 ## Observability
+
+### Local Docker Compose observability
 
 Observability is disabled in the lighter runtime stack. `make stack-full` starts
 the runtime services plus the OpenTelemetry Collector, Tempo, Grafana, and local
@@ -330,6 +346,30 @@ Langfuse is seeded from `.env` by default:
 demo@bookstore.local
 bookstore-demo
 ```
+
+### Azure AKS observability
+
+The Azure deployment is independent of the local Kubernetes files. It does not
+use `k8s/observability` or either local combined overlay.
+
+```bash
+# Render without changing the cluster
+kubectl kustomize k8s/azure/observability/dev
+helm template langfuse langfuse/langfuse \
+  --version 1.5.39 \
+  --namespace monitoring \
+  -f k8s/azure/observability/dev/langfuse-values.yaml
+
+# Install or upgrade Langfuse, Tempo, Grafana, and the Collector
+k8s/azure/observability/dev/deploy.sh
+
+# Verify private Azure monitoring endpoints from inside the cluster
+kubectl -n monitoring get pods
+kubectl -n monitoring port-forward svc/grafana 3001:3000
+kubectl -n monitoring port-forward svc/langfuse-web 3002:3000
+```
+
+### Local Kubernetes observability
 
 Observability runs in the Kubernetes `monitoring` namespace. The bookstore app
 remains in `bookstore`, but `bookstore-config` points app traces to
@@ -442,8 +482,8 @@ curl -N http://localhost:8300/chat \
   -H 'Content-Type: application/json' \
   -d '{"agent":"release_scout","message":"Find upcoming cozy fantasy releases."}'
 
-# Prepare and query Review Summarizer; requires seeded Postgres and Azure AI Search config
-docker compose run --rm bookstore-cli bookstore-ai-search rebuild
+# Prepare and query Review Summarizer; requires seeded Postgres and vector search config
+docker compose run --rm bookstore-cli bookstore-vector-search rebuild
 curl -N http://localhost:8300/chat \
   -H 'Content-Type: application/json' \
   -d '{"agent":"review_summarizer","message":"What do people like and dislike about The Lantern Cipher?"}'

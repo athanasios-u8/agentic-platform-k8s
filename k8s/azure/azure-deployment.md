@@ -12,6 +12,7 @@ passwords, tokens, or API keys.
 - Azure resource group: `nucleus_swec_dev-rg`
 - AKS cluster: `aks-nucleus-dev-swec-001`
 - Namespace: `nucleus`
+- Monitoring namespace: `monitoring`
 - ACR: `acrnucleusdevswec001.azurecr.io`
 - PostgreSQL server: `psql-nucleus-dev-swec-001.postgres.database.azure.com`
 - Azure AI Search service: `srch-nucleus-dev-swec-001`
@@ -68,24 +69,23 @@ PATH=/private/tmp/aks-tools:$PATH kubectl get crd | grep kaos
 
 ## Build and push images
 
-The Azure dev manifests set `BOOKSTORE_SERVICE_MODULE` per workload, so the
-Python services can reuse one backend image digest under multiple service tags.
+Each Python service image is built with its own default
+`BOOKSTORE_SERVICE_MODULE`. The Azure manifests also set that variable
+explicitly, so the image is self-describing and the deployed configuration is
+visible in Kubernetes. The Dockerfile keeps the service-specific layer after
+the dependency layers so independent builds reuse the same cache.
 
 ```bash
-ACR="acrnucleusdevswec001.azurecr.io"
-BACKEND_IMAGE="$ACR/bookstore/backend:dev"
-
-docker buildx build \
-  --platform linux/amd64 \
-  -t "$BACKEND_IMAGE" \
-  --push .
+DOCKER_DEFAULT_PLATFORM=linux/amd64 make docker-build-backend-images \
+  BACKEND_IMAGE_PREFIX=acrnucleusdevswec001.azurecr.io/bookstore \
+  IMAGE_TAG=dev
 ```
 
 ```bash
 ACR="acrnucleusdevswec001.azurecr.io"
-BACKEND_IMAGE="$ACR/bookstore/backend:dev"
 
 for service in \
+  backend \
   catalog-mcp \
   customer-mcp \
   store-operations-mcp \
@@ -99,7 +99,6 @@ for service in \
   store-manager-agent \
   frontend-gateway
 do
-  docker tag "$BACKEND_IMAGE" "$ACR/bookstore/$service:dev"
   docker push "$ACR/bookstore/$service:dev"
 done
 ```
@@ -120,13 +119,26 @@ deployment:
 k8s/azure/scripts/mirror-runtime-images.sh
 ```
 
-The final backend image digest rolled out during the dev deployment was:
+The final backend and frontend-gateway image digest rolled out during this dev
+deployment was:
 
 ```text
-sha256:12044ee74e3e17048fff24bd123ecd281ac078b60c2bfdcb196a857157fe0eae
+sha256:c679627d0be545ecaab82a19ba07f88c9aeba9fdea9e42c725df640704707348
 ```
 
-## Deploy application manifests
+## Deploy observability and application manifests
+
+Azure observability has its own complete deployment package. Deploy it before
+the application because the Azure application ConfigMap enables tracing by
+default:
+
+```bash
+k8s/azure/observability/dev/deploy.sh
+```
+
+This installs pinned Langfuse chart `1.5.39` with the managed Azure PostgreSQL
+`langfuse` database and applies the Azure-owned Tempo, Grafana, and Collector
+manifests. It does not read the local `k8s/observability` directory.
 
 ## Optional secure VNet mode
 
@@ -152,7 +164,7 @@ az network vnet show \
 Public mode preview:
 
 ```bash
-terraform -chdir=infra/terraform plan \
+terraform -chdir=infra/azure/terraform plan \
   -var-file=environments/dev/terraform.tfvars \
   -var='deployment_in_vnet=false'
 ```
@@ -160,7 +172,7 @@ terraform -chdir=infra/terraform plan \
 Secure VNet mode, using the checked-in dev tfvars:
 
 ```bash
-terraform -chdir=infra/terraform plan \
+terraform -chdir=infra/azure/terraform plan \
   -var-file=environments/dev/terraform.tfvars
 ```
 
@@ -321,16 +333,15 @@ approvals: 0
 
 ```bash
 PATH=/private/tmp/aks-tools:$PATH kubectl -n nucleus exec -i deploy/agent-review-summarizer -- python - <<'PY'
-from bookstore_agents.azure_ai_search.search import _search_client, search_reviews
+from bookstore_agents.vector_search.factory import create_vector_search_backend
 
-client = _search_client()
-print(f"search_documents: {client.get_document_count()}")
+backend = create_vector_search_backend()
+print(f"search_documents: {backend.count_documents()}")
 
-rows = search_reviews(
+rows = backend.search_reviews(
     "the lantern cipher",
     "What do readers like and dislike?",
     top=3,
-    search_client=client,
 )
 
 print(f"lantern_cipher_hits: {len(rows)}")
@@ -342,7 +353,7 @@ PY
 Expected dev result after the recorded run:
 
 ```text
-search_documents: 32
+search_documents: 489
 lantern_cipher_hits: 3
 ```
 
@@ -407,13 +418,19 @@ python3 "$HOME/.codex/skills/align-env-files/scripts/check_env_alignment.py" --n
 
 ```bash
 PATH=/private/tmp/aks-tools:$PATH kubectl kustomize k8s/azure/dev > /tmp/nucleus-azure-dev.yaml
+PATH=/private/tmp/aks-tools:$PATH kubectl kustomize k8s/azure/observability/dev > /tmp/nucleus-azure-observability-dev.yaml
+helm template langfuse langfuse/langfuse \
+  --version 1.5.39 \
+  --namespace monitoring \
+  -f k8s/azure/observability/dev/langfuse-values.yaml \
+  > /tmp/nucleus-azure-langfuse-dev.yaml
 PATH=/private/tmp/aks-tools:$PATH kubectl kustomize k8s/azure/database/dev > /tmp/nucleus-azure-db-dev.yaml
 PATH=/private/tmp/aks-tools:$PATH kubectl kustomize k8s/azure/search/dev > /tmp/nucleus-azure-search-dev.yaml
 ```
 
 ```bash
-terraform -chdir=infra/terraform fmt -check
-terraform -chdir=infra/terraform validate
+terraform -chdir=infra/azure/terraform fmt -check
+terraform -chdir=infra/azure/terraform validate
 ```
 
 ```bash

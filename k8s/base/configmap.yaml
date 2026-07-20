@@ -5,6 +5,7 @@ metadata:
 data:
   OPENAI_MODEL: gpt-5.5
   OPENAI_TRACING_ENABLED: "true"
+  BOOK_REVIEW_SEARCH_PROVIDER: azure_ai_search
   AZURE_AI_SEARCH_INDEX_NAME: srch-index-bookstore-dev
   BOOK_REVIEW_SEARCH_TOP_K: "15"
   CATALOG_MCP_PORT: "8101"

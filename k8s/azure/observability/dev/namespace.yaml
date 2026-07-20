@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: bookstore-agents
+    bookstore.unit8.com/cloud: azure
+    bookstore.unit8.com/environment: dev

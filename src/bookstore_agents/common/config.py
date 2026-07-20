@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     openai_tracing_enabled: bool = Field(default=True, alias="OPENAI_TRACING_ENABLED")
     model_api_url: str | None = Field(default=None, alias="MODEL_API_URL")
 
+    book_review_search_provider: Literal["azure_ai_search", "opensearch"] = Field(
+        default="azure_ai_search",
+        alias="BOOK_REVIEW_SEARCH_PROVIDER",
+    )
     azure_ai_search_endpoint: str | None = Field(
         default=None,
         alias="AZURE_AI_SEARCH_ENDPOINT",
@@ -38,6 +42,17 @@ class Settings(BaseSettings):
         default="srch-index-bookstore-dev",
         alias="AZURE_AI_SEARCH_INDEX_NAME",
     )
+    opensearch_endpoint: str | None = Field(default=None, alias="OPENSEARCH_ENDPOINT")
+    opensearch_index_name: str = Field(
+        default="bookstore-reviews-dev",
+        alias="OPENSEARCH_INDEX_NAME",
+    )
+    opensearch_use_aws_auth: bool = Field(default=True, alias="OPENSEARCH_USE_AWS_AUTH")
+    opensearch_service: str = Field(default="es", alias="OPENSEARCH_SERVICE")
+    opensearch_username: str | None = Field(default=None, alias="OPENSEARCH_USERNAME")
+    opensearch_password: str | None = Field(default=None, alias="OPENSEARCH_PASSWORD")
+    opensearch_verify_certs: bool = Field(default=True, alias="OPENSEARCH_VERIFY_CERTS")
+    aws_region: str = Field(default="us-east-1", alias="AWS_REGION")
     book_review_search_top_k: int = Field(default=15, alias="BOOK_REVIEW_SEARCH_TOP_K")
     book_review_data_path: str = Field(
         default="data/book_reviews/book_reviews.jsonl",
@@ -149,6 +164,19 @@ class Settings(BaseSettings):
         if value == "":
             return None
         return value
+
+    @field_validator("book_review_search_provider", mode="before")
+    @classmethod
+    def empty_search_provider_uses_azure(cls, value: Any) -> Any:
+        aliases = {
+            None: "azure_ai_search",
+            "": "azure_ai_search",
+            "azure": "azure_ai_search",
+            "azure-ai-search": "azure_ai_search",
+            "opensearch_search": "opensearch",
+            "aws": "opensearch",
+        }
+        return aliases.get(value, value)
 
 
 @lru_cache

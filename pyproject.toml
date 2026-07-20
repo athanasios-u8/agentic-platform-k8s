@@ -9,6 +9,7 @@ dependencies = [
     "aiohttp>=3.13.0",
     "azure-identity>=1.23.0",
     "azure-search-documents>=11.6.0",
+    "boto3>=1.35.0",
     "fastapi>=0.115.0",
     "fastmcp>=3.2.4",
     "httpx>=0.27.0",
@@ -19,6 +20,7 @@ dependencies = [
     "opentelemetry-instrumentation-httpx>=0.63b0",
     "opentelemetry-sdk>=1.42.0",
     "openai-chatkit>=0.1.0",
+    "opensearch-py>=2.7.1",
     "psycopg[binary,pool]>=3.2.0",
     "pydantic>=2.8.0",
     "pydantic-settings>=2.4.0",
@@ -38,7 +40,8 @@ dev = [
 bookstore-init-db = "scripts.init_db:main"
 bookstore-seed-data = "scripts.seed_fake_data:main"
 bookstore-reset-data = "scripts.reset_demo_data:main"
-bookstore-ai-search = "bookstore_agents.azure_ai_search.cli:main"
+bookstore-vector-search = "bookstore_agents.vector_search.cli:main"
+bookstore-ai-search = "bookstore_agents.vector_search.cli:main"
 
 [build-system]
 requires = ["hatchling"]

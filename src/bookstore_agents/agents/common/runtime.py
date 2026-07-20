@@ -8,8 +8,6 @@ from bookstore_agents.agents.common.agent_cards import AgentSpec
 from bookstore_agents.agents.common.mcp_client import MCPClient
 from bookstore_agents.agents.common.ollama_runtime import OllamaTextRuntime
 from bookstore_agents.agents.common.openai_runtime import OpenAITextRuntime
-from bookstore_agents.azure_ai_search.search import AzureSearchConfigError
-from bookstore_agents.azure_ai_search.service import BookReviewSearchService
 from bookstore_agents.common.approvals import WRITE_TOOLS, create_approval
 from bookstore_agents.common.observability import (
     mark_span_error,
@@ -22,10 +20,16 @@ from bookstore_agents.common.observability import (
 from bookstore_agents.mcp_servers.catalog.repository import CatalogRepository
 from bookstore_agents.mcp_servers.customer.repository import CustomerRepository
 from bookstore_agents.mcp_servers.store_operations.repository import StoreOperationsRepository
+from bookstore_agents.vector_search.backend import VectorSearchConfigurationError
+from bookstore_agents.vector_search.service import BookReviewSearchService
 
 
 class AgentRuntime:
-    def __init__(self, spec: AgentSpec):
+    def __init__(
+        self,
+        spec: AgentSpec,
+        review_service: BookReviewSearchService | None = None,
+    ):
         self.spec = spec
         self.mcp_client = MCPClient(spec.mcp_servers)
         self.a2a_client = A2AClient()
@@ -36,7 +40,7 @@ class AgentRuntime:
         self.catalog_repo = CatalogRepository()
         self.customer_repo = CustomerRepository()
         self.store_repo = StoreOperationsRepository()
-        self.review_service = BookReviewSearchService()
+        self.review_service = review_service or BookReviewSearchService()
 
     async def run(
         self, message: str, context: dict[str, Any] | None = None
@@ -530,11 +534,11 @@ class AgentRuntime:
 
         try:
             reviews = self.review_service.search_for_book(book, message, top_k)
-        except AzureSearchConfigError as exc:
+        except VectorSearchConfigurationError as exc:
             yield {
                 "type": "final",
                 "agent": self.spec.name,
-                "answer": f"Azure AI Search is not configured for review retrieval: {exc}",
+                "answer": f"Vector search is not configured for review retrieval: {exc}",
                 "data": {"book": book.model_dump(), "configuration_error": True},
             }
             return

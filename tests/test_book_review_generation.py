@@ -3,9 +3,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from bookstore_agents.azure_ai_search import reviews
-from bookstore_agents.azure_ai_search.catalog import BookRecord
-from bookstore_agents.azure_ai_search.reviews import (
+from bookstore_agents.vector_search import reviews
+from bookstore_agents.vector_search.catalog import BookRecord
+from bookstore_agents.vector_search.reviews import (
     GeneratedReview,
     GeneratedReviewBatch,
     build_review_plans,

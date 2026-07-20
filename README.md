@@ -9,20 +9,20 @@ This repository implements a demo multi-agent bookstore assistant:
 - A2A-style streaming endpoints for agent calls
 - OpenAI-backed bookstore agents plus an Ollama-backed Release Scout agent
 - Tavily-backed internet search for upcoming book releases
-- Azure AI Search-backed review retrieval for book review summaries
+- Configurable Azure AI Search or OpenSearch retrieval for book review summaries
 - ChatKit-oriented frontend gateway and dockerized browser frontend
 
 Useful supporting docs:
 
 - `docs/bookstore-agent-scenario.md`
 - `docs/architecture/azure-accelerator-architecture.svg`
-- `infra/terraform/README.md`
+- `infra/azure/terraform/README.md`
 - `frontend/README.md`
 - `COMMANDS.md`
 
-The initial Azure development foundation is defined in `infra/terraform`. It
-uses Sweden Central, the `nucleus-dev-swec-001` naming suffix, public connectivity,
-AKS workload identity, managed PostgreSQL, Microsoft Foundry, AI Search, Blob
+The initial Azure development foundation is defined in `infra/azure/terraform`. It
+uses Sweden Central, the `nucleus-dev-swec-001` naming suffix, secure VNet and
+Private Link connectivity, AKS workload identity, managed PostgreSQL, Microsoft Foundry, AI Search, Blob
 Storage, Key Vault, ACR, Log Analytics, and Application Insights. See the
 Terraform README for the exact resource list, security posture, and commands.
 
@@ -119,13 +119,18 @@ CPU inference can be slow on first prompt/model load; `OLLAMA_TIMEOUT_SECONDS`
 and `A2A_STREAM_TIMEOUT_SECONDS` keep Release Scout from surfacing that delay as
 a network failure.
 
-## Azure AI Search Book Reviews
+## Vector Search Book Reviews
 
 Review Summarizer uses synthetic reviews generated from the Postgres catalog,
-stored locally as JSONL, and uploaded unchunked to Azure AI Search. Configure
-the search service in `.env`:
+stored locally as JSONL, and uploaded unchunked to the backend selected by
+`BOOK_REVIEW_SEARCH_PROVIDER`. The runtime and population CLI use the same
+provider-neutral interface for index creation, document upload, counts, and
+review retrieval.
+
+Use Azure AI Search with a key or managed identity:
 
 ```env
+BOOK_REVIEW_SEARCH_PROVIDER=azure_ai_search
 AZURE_AI_SEARCH_ENDPOINT=https://<search-service>.search.windows.net
 AZURE_AI_SEARCH_INDEX_NAME=srch-index-bookstore-dev
 AZURE_AI_SEARCH_ADMIN_KEY=...
@@ -137,6 +142,21 @@ BOOK_REVIEW_MAX_REVIEWS=15
 BOOK_REVIEW_MAX_BOOKS=
 ```
 
+Or use OpenSearch with AWS SigV4 authentication:
+
+```env
+BOOK_REVIEW_SEARCH_PROVIDER=opensearch
+OPENSEARCH_ENDPOINT=https://<domain>.<region>.es.amazonaws.com
+OPENSEARCH_INDEX_NAME=bookstore-reviews-dev
+OPENSEARCH_USE_AWS_AUTH=true
+OPENSEARCH_SERVICE=es
+OPENSEARCH_VERIFY_CERTS=true
+AWS_REGION=us-east-1
+```
+
+For a non-AWS OpenSearch cluster, set `OPENSEARCH_USE_AWS_AUTH=false` and
+provide `OPENSEARCH_USERNAME` and `OPENSEARCH_PASSWORD` when required.
+
 Generate and upload the review corpus after Postgres has been seeded:
 
 ```bash
@@ -144,12 +164,12 @@ Generate and upload the review corpus after Postgres has been seeded:
 make reset-db
 
 # Generate reviews, create/update the search index, and upload documents
-docker compose run --rm bookstore-cli bookstore-ai-search rebuild
+docker compose run --rm bookstore-cli bookstore-vector-search rebuild
 
-# Or run the Azure AI Search steps separately
-docker compose run --rm bookstore-cli bookstore-ai-search generate-reviews
-docker compose run --rm bookstore-cli bookstore-ai-search create-index
-docker compose run --rm bookstore-cli bookstore-ai-search upload-reviews
+# Or run the provider-neutral steps separately
+docker compose run --rm bookstore-cli bookstore-vector-search generate-reviews
+docker compose run --rm bookstore-cli bookstore-vector-search create-index
+docker compose run --rm bookstore-cli bookstore-vector-search upload-reviews
 ```
 
 The generated JSONL file defaults to `data/book_reviews/book_reviews.jsonl` and
@@ -174,7 +194,7 @@ like and dislike about The Lantern Cipher?"
 | `reservation-specialist-agent` | 8204 | Reservation subagent |
 | `message-drafter-agent` | 8205 | No-tool drafting subagent |
 | `release-scout-agent` | 8206 | Ollama-backed upcoming release subagent |
-| `review-summarizer-agent` | 8207 | Azure AI Search-backed review summarization subagent |
+| `review-summarizer-agent` | 8207 | Configurable vector-search review summarization subagent |
 | `frontend-gateway` | 8300 | ChatKit gateway and approval routes |
 | `frontend` | 3000 | Browser UI |
 | `tempo` | 3200 | Full-stack trace store queried by Grafana |
@@ -213,7 +233,7 @@ flowchart LR
   RS["reservation-specialist-agent\nOpenAI"]
   MD["message-drafter-agent\nOpenAI"]
   Scout["release-scout-agent\nOllama llama3.2:3b"]
-  Reviews["review-summarizer-agent\nOpenAI + Azure AI Search"]
+  Reviews["review-summarizer-agent\nOpenAI + vector search"]
 
   Catalog["catalog-mcp"]
   Customer["customer-mcp"]
@@ -222,7 +242,7 @@ flowchart LR
   DB[("PostgreSQL")]
   Tavily["Tavily Search API"]
   Ollama["Ollama /api/chat"]
-  Search["Azure AI Search\nsrch-index-bookstore-dev"]
+  Search["Configured vector search\nAzure AI Search / OpenSearch"]
   Config["runtime config\n.env / bookstore-config"]
   Secrets["runtime secrets\n.env / bookstore-secrets"]
 
@@ -301,18 +321,36 @@ frontend images for local full-stack runs.
 
 ## Kubernetes
 
-The reusable KAOS deployment lives in `k8s/kaos`. The Azure-ready AKS variant
-lives in `k8s/azure`: it reuses those KAOS custom resources, replaces local
-PostgreSQL and OpenAI dependencies with the Terraform-provisioned Azure
-services, and injects AKS workload identities. `k8s/azure/dev` contains complete
-environment-specific manifests; Kustomize only aggregates those files and does
-not patch or transform them. See `k8s/azure/README.md` for the identity, Key
-Vault, ACR, Foundry, and environment-copying conventions.
+Deployment configuration is separated by target. Duplication between targets
+is intentional: a cloud deployment must not read manifests, values, or
+environment variables from a local deployment or another cloud.
+
+| Target | Configuration |
+|---|---|
+| Local processes and containers | `docker-compose.yml` plus the optional `docker-compose.observability.yml` |
+| Local Kubernetes | `k8s/base`, `k8s/kaos`, and the local `k8s/observability` bundles |
+| Azure Kubernetes Service | `k8s/azure`, including `k8s/azure/observability/dev` |
+| AWS | Reserved for future complete manifests under `k8s/aws`; Azure files are not intended as runtime bases |
+
+The Azure-ready AKS variant lives entirely in `k8s/azure`. `k8s/azure/dev`
+contains complete application manifests, while
+`k8s/azure/observability/dev` contains the Azure dev monitoring namespace,
+Langfuse Helm values, Tempo, Grafana, and OpenTelemetry Collector resources.
+Kustomize only aggregates files inside each Azure environment and does not
+inherit the local Kubernetes bundles. See `k8s/azure/README.md` for the
+identity, Key Vault, ACR, Foundry, observability, and environment-copying
+conventions.
 
 Render the Azure dev bundle locally without changing the cluster:
 
 ```bash
 kubectl kustomize k8s/azure/dev > /tmp/nucleus-azure-dev.yaml
+kubectl kustomize k8s/azure/observability/dev > /tmp/nucleus-azure-observability-dev.yaml
+helm template langfuse langfuse/langfuse \
+  --version 1.5.39 \
+  --namespace monitoring \
+  -f k8s/azure/observability/dev/langfuse-values.yaml \
+  > /tmp/nucleus-azure-langfuse-dev.yaml
 ```
 
 Azure PostgreSQL population is kept out of that bundle because it truncates and
@@ -336,7 +374,7 @@ The underlying `k8s/kaos` deployment uses KAOS custom resources for `ModelAPI`,
 - `ModelAPI/llama3-2-3b` for the hosted Ollama `llama3.2:3b` runtime
 - `MCPServer/upcoming-releases` for Tavily-backed internet search
 - `Agent/release-scout` for upcoming book-release scouting
-- `Agent/review-summarizer` for Azure AI Search-backed review summaries
+- `Agent/review-summarizer` for configured vector-search review summaries
 
 Build all images, including the frontend image that contains agent-specific
 prompt recommendations and local chat history, then apply the KAOS stack with
@@ -431,10 +469,10 @@ Job, Upcoming Releases MCP server, Release Scout agent, and Review Summarizer
 agent. It does not include a plain Kubernetes browser frontend manifest; use the
 KAOS overlay or Docker Compose when you need the browser UI.
 
-Set `AZURE_AI_SEARCH_ENDPOINT` and at least one Azure AI Search key in
-`bookstore-secrets` before expecting Review Summarizer to retrieve live indexed
-reviews. Review Summarizer also needs `bookstore-config` because the Agent
-references `AZURE_AI_SEARCH_INDEX_NAME` and `BOOK_REVIEW_SEARCH_TOP_K`.
+Set `BOOK_REVIEW_SEARCH_PROVIDER` and the selected provider's endpoint and
+credentials before expecting Review Summarizer to retrieve live indexed reviews.
+Review Summarizer also needs `bookstore-config` for the provider-specific index
+name and `BOOK_REVIEW_SEARCH_TOP_K`.
 
 ## Observability
 
@@ -451,12 +489,21 @@ OTEL_RESOURCE_ATTRIBUTES=deployment.environment=demo,service.namespace=bookstore
 
 Run `make stack-full` to start the runtime services plus the OpenTelemetry
 Collector, Tempo, Grafana, and local OSS Langfuse. The collector fans out traces
-to both Tempo and Langfuse. In Kubernetes, the observability stack runs in the
-`monitoring` namespace and the app exports traces to
-`otel-collector.monitoring.svc.cluster.local`. See `COMMANDS.md#observability`
-for the grouped local startup commands, health checks, smoke trace commands,
-URLs, and the full Kubernetes apply order, including the Langfuse auth secret
-step after applying the observability overlay.
+to both Tempo and Langfuse. Local Kubernetes uses the local
+`k8s/observability` files. Azure uses the independent
+`k8s/azure/observability/dev` package and enables tracing in
+`k8s/azure/dev/configuration.yaml`; its deploy helper bootstraps uncommitted
+runtime secrets, installs the pinned Langfuse chart, and applies the Azure-owned
+Tempo, Grafana, and Collector manifests:
+
+```bash
+k8s/azure/observability/dev/deploy.sh
+kubectl apply -k k8s/azure/dev
+```
+
+Both Kubernetes targets use the `monitoring` namespace and the app exports
+traces to `otel-collector.monitoring.svc.cluster.local`. See
+`COMMANDS.md#observability` for target-specific commands and smoke tests.
 
 The full Compose overlay is `docker-compose.observability.yml`. It adds
 `tempo`, `grafana`, `otel-collector`, `langfuse-web`, `langfuse-worker`,
@@ -469,7 +516,7 @@ its console on `9091`.
 The frontend has a left-pane agent list for the seven built-in gateway agent
 keys and sends messages through the `frontend-gateway`. In the runtime stack,
 Release Scout is selectable and backed by Ollama; Review Summarizer is
-selectable and backed by Azure AI Search.
+selectable and backed by the configured Azure AI Search or OpenSearch provider.
 The active run timeline appears inline below each user message, so longer
 conversations scroll inside the conversation pane instead of creating a second
 page-level timeline.

@@ -16,7 +16,7 @@ It assumes the KAOS operator and CRDs are already installed in the cluster.
 - Seven `Agent` resources that run the current KAOS-deployed bookstore agent images
   - Existing agents use `ModelAPI/openai`
   - `Agent/release-scout` uses `ModelAPI/llama3-2-3b` and the upcoming releases MCP server
-  - `Agent/review-summarizer` uses `ModelAPI/openai` and Azure AI Search review retrieval
+  - `Agent/review-summarizer` uses `ModelAPI/openai` and configured vector-search retrieval
 - `frontend-gateway`: API gateway for chat and approvals
 - `frontend`: browser UI served by nginx
 - Postgres, config, secret, and demo-data reset resources needed by the bookstore stack

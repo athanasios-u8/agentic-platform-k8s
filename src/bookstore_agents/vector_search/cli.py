@@ -2,30 +2,29 @@ import argparse
 import asyncio
 from pathlib import Path
 
-from bookstore_agents.azure_ai_search.reviews import (
+from bookstore_agents.common.config import get_settings
+from bookstore_agents.vector_search.factory import create_vector_search_backend
+from bookstore_agents.vector_search.reviews import (
     generate_review_documents,
     read_reviews_jsonl,
     write_reviews_jsonl,
 )
-from bookstore_agents.azure_ai_search.search import (
-    create_or_update_review_index,
-    upload_review_documents,
-)
-from bookstore_agents.common.config import get_settings
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Configure Azure AI Search for bookstore reviews.")
+    parser = argparse.ArgumentParser(
+        description="Configure and populate the selected bookstore vector search backend."
+    )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     generate = subcommands.add_parser("generate-reviews", help="Generate local review JSONL.")
     generate.add_argument("--output", default=None, help="Output JSONL path.")
 
-    subcommands.add_parser("create-index", help="Create or update the Azure AI Search index.")
+    subcommands.add_parser("create-index", help="Create or update the configured search index.")
 
     upload = subcommands.add_parser(
         "upload-reviews",
-        help="Upload review JSONL to Azure AI Search.",
+        help="Upload review JSONL to the configured search backend.",
     )
     upload.add_argument("--input", default=None, help="Input JSONL path.")
 
@@ -56,24 +55,30 @@ def main() -> None:
         return
 
     if args.command == "create-index":
-        create_or_update_review_index()
-        print(f"Created or updated Azure AI Search index {settings.azure_ai_search_index_name}.")
+        backend = create_vector_search_backend(settings)
+        backend.create_or_update_index()
+        print(f"Created or updated {backend.provider_name} index {backend.index_name}.")
         return
 
     if args.command == "upload-reviews":
         input_path = Path(args.input or settings.book_review_data_path)
         documents = read_reviews_jsonl(input_path)
-        uploaded = upload_review_documents(documents)
-        print(f"Uploaded {uploaded} review documents to {settings.azure_ai_search_index_name}.")
+        backend = create_vector_search_backend(settings)
+        uploaded = backend.upload_documents(documents)
+        print(
+            f"Uploaded {uploaded} review documents to "
+            f"{backend.provider_name} index {backend.index_name}."
+        )
         return
 
     if args.command == "rebuild":
         output_path = asyncio.run(_generate(args.output))
-        create_or_update_review_index()
+        backend = create_vector_search_backend(settings)
+        backend.create_or_update_index()
         documents = read_reviews_jsonl(output_path)
-        uploaded = upload_review_documents(documents)
+        uploaded = backend.upload_documents(documents)
         print(
-            f"Rebuilt {settings.azure_ai_search_index_name} with "
+            f"Rebuilt {backend.provider_name} index {backend.index_name} with "
             f"{uploaded} review documents from {output_path}."
         )
 

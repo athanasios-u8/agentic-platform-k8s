@@ -4,6 +4,7 @@ metadata:
   name: bookstore-config
   namespace: bookstore
 data:
+  BOOK_REVIEW_SEARCH_PROVIDER: azure_ai_search
   OPENAI_MODEL: gpt-5.5
   OPENAI_TRACING_ENABLED: "true"
   AZURE_AI_SEARCH_INDEX_NAME: srch-index-bookstore-dev

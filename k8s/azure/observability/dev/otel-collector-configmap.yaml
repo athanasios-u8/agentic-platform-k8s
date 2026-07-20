@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 256
+        spike_limit_mib: 64
+      batch:
+        timeout: 2s
+        send_batch_size: 128
+
+    exporters:
+      otlphttp/tempo:
+        endpoint: http://tempo:4318
+      otlphttp/langfuse:
+        endpoint: http://langfuse-web:3000/api/public/otel
+        headers:
+          Authorization: "Basic ${env:LANGFUSE_AUTH_STRING}"
+          x-langfuse-ingestion-version: "4"
+      debug:
+        verbosity: basic
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp/tempo, otlphttp/langfuse]

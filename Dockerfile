@@ -4,10 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
+    UV_HTTP_TIMEOUT=120 \
     PATH="/app/.venv/bin:$PATH"
-
-ARG BOOKSTORE_SERVICE_MODULE=bookstore_agents.frontend_gateway.server
-ENV BOOKSTORE_SERVICE_MODULE=${BOOKSTORE_SERVICE_MODULE}
 
 WORKDIR /app
 
@@ -23,6 +21,9 @@ RUN uv sync --frozen --no-dev --no-cache \
     && groupadd --system bookstore \
     && useradd --system --gid bookstore --home-dir /app --shell /usr/sbin/nologin bookstore \
     && chown -R bookstore:bookstore /app
+
+ARG BOOKSTORE_SERVICE_MODULE=bookstore_agents.frontend_gateway.server
+ENV BOOKSTORE_SERVICE_MODULE=${BOOKSTORE_SERVICE_MODULE}
 
 USER bookstore
 

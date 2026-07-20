@@ -12,6 +12,8 @@ deploy-resources.sh
 .LOCAL_KEYS
 data/book_reviews/*.jsonl
 
+marketing/
+
 # Terraform working files, plans, and state. Environment tfvars are committed;
 # secrets must be supplied through Azure authentication or generated at apply.
 **/.terraform/*

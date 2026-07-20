@@ -12,7 +12,7 @@ spec:
   modelAPI: openai
   model: gpt-5.5
   config:
-    description: Summarizes customer reviews for a requested book using Azure AI Search.
+    description: Summarizes customer reviews using the configured vector search backend.
     instructions: |
       You are the Review Summarizer for a local bookstore. Summarize only the retrieved
       customer reviews for the requested book. Separate what readers like from what

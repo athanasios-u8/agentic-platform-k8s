@@ -24,8 +24,8 @@ spec:
         - sh
         - -c
         - |
-          bookstore-ai-search create-index
-          bookstore-ai-search upload-reviews --input /app/data/book_reviews/book_reviews.jsonl
+          bookstore-vector-search create-index
+          bookstore-vector-search upload-reviews --input /app/data/book_reviews/book_reviews.jsonl
         env:
         - name: PGHOST
           value: psql-nucleus-dev-swec-001.postgres.database.azure.com
@@ -33,6 +33,8 @@ spec:
           value: nucleusadmin
         - name: AZURE_AI_SEARCH_ENDPOINT
           value: https://srch-nucleus-dev-swec-001.search.windows.net
+        - name: BOOK_REVIEW_SEARCH_PROVIDER
+          value: azure_ai_search
         - name: AZURE_AI_SEARCH_INDEX_NAME
           value: srch-index-bookstore-dev
         - name: DATABASE_URL

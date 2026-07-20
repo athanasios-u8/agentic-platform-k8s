@@ -1,7 +1,7 @@
 # Azure AKS manifests
 
 This directory contains complete, environment-specific manifests for the Azure
-infrastructure created by `infra/terraform`. The dev resources are written in
+infrastructure created by `infra/azure/terraform`. The dev resources are written in
 their final form: namespaces, images, endpoints, managed identity client IDs,
 database connections, and Secret references are visible directly in the files.
 
@@ -36,6 +36,15 @@ k8s/azure/
 ├── search/dev/
 │   ├── job.yaml                   # Complete AI Search population Job
 │   └── kustomization.yaml         # resources list only
+├── observability/dev/
+│   ├── namespace.yaml             # Azure dev monitoring namespace
+│   ├── langfuse-values.yaml       # Azure dev Langfuse Helm values
+│   ├── runtime-secrets.example.yaml # Shape only; excluded from deployment
+│   ├── tempo-*.yaml               # Azure-owned Tempo resources
+│   ├── grafana-*.yaml             # Azure-owned Grafana resources
+│   ├── otel-collector-*.yaml      # Azure-owned Collector resources
+│   ├── kustomization.yaml         # Azure observability resources only
+│   └── deploy.sh                  # Secret bootstrap, Helm, and Kustomize apply
 └── scripts/
     ├── mirror-runtime-images.sh
     ├── populate-postgres.sh
@@ -62,6 +71,10 @@ The full dev manifests reference the Terraform-provisioned resources directly:
 The duplication is intentional. A reviewer can inspect a workload without
 mentally applying a chain of transformations, and each file can be copied or
 processed by tools that understand normal Kubernetes YAML.
+
+Azure manifests do not reference `k8s/base`, `k8s/kaos`,
+`k8s/observability`, Docker Compose files, or a future `k8s/aws` tree. The local
+Kubernetes and Docker Compose targets remain separately deployable.
 
 Application workloads that use the mutable `dev` image tag set
 `imagePullPolicy: Always` in the dev manifests. This keeps Azure iteration
@@ -111,6 +124,12 @@ Render the application resources locally without contacting a cluster:
 
 ```bash
 kubectl kustomize k8s/azure/dev > /tmp/nucleus-azure-dev.yaml
+kubectl kustomize k8s/azure/observability/dev > /tmp/nucleus-azure-observability-dev.yaml
+helm template langfuse langfuse/langfuse \
+  --version 1.5.39 \
+  --namespace monitoring \
+  -f k8s/azure/observability/dev/langfuse-values.yaml \
+  > /tmp/nucleus-azure-langfuse-dev.yaml
 ```
 
 The rendered bundle contains 24 complete resources and no population Job. It
@@ -119,6 +138,36 @@ also contains no local PostgreSQL Deployment, Service, or PVC.
 Because the source files are already complete, they can also be inspected or
 validated individually. The `kustomization.yaml` file only provides a
 convenient deterministic bundle.
+
+## Deploy Azure observability
+
+Azure dev observability is enabled by default in the application ConfigMap.
+Deploy the monitoring package before the application so the Collector endpoint
+is ready when application pods start:
+
+```bash
+k8s/azure/observability/dev/deploy.sh
+kubectl apply -k k8s/azure/dev
+```
+
+The helper accepts only the `aks-nucleus-dev-swec-001` context. It reuses an
+existing `langfuse-runtime-secrets` Secret. On a first deployment, it reads only
+the PostgreSQL administrator password from Azure Key Vault, generates the
+remaining Langfuse, ClickHouse, Redis, and MinIO credentials, creates the
+URL-encoded PostgreSQL connection Secret, and installs pinned Langfuse chart
+`1.5.39`. No secret value is stored in Git.
+
+The Azure values use the Terraform-provisioned `langfuse` database on Azure
+PostgreSQL and resource-sized in-cluster ClickHouse, Redis, and MinIO instances
+for dev. Tempo stores 24 hours of traces on ephemeral storage; this is a dev
+retention choice, not a production durability design.
+
+Use ClusterIP port-forwards for the private UIs:
+
+```bash
+kubectl -n monitoring port-forward svc/grafana 3001:3000
+kubectl -n monitoring port-forward svc/langfuse-web 3002:3000
+```
 
 ## Populate Azure PostgreSQL
 
@@ -151,7 +200,7 @@ updates the Search index and uploads the checked-in synthetic review seed file
 from `data/book_reviews/book_reviews.jsonl` using the indexer workload identity.
 This keeps dev population deterministic and avoids coupling deployment to live
 review generation. Future environment overlays can switch back to Foundry-backed
-generation by running `bookstore-ai-search rebuild` and setting
+generation by running `bookstore-vector-search rebuild` and setting
 `BOOK_REVIEW_MIN_REVIEWS`, `BOOK_REVIEW_MAX_REVIEWS`, and
 `BOOK_REVIEW_MAX_BOOKS`.
 
@@ -188,6 +237,8 @@ k8s/azure/database/staging/
 k8s/azure/database/prod/
 k8s/azure/search/staging/
 k8s/azure/search/prod/
+k8s/azure/observability/staging/
+k8s/azure/observability/prod/
 ```
 
 Copy the corresponding dev directory, then replace every environment-specific

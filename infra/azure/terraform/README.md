@@ -146,18 +146,18 @@ plan. AzureRM 4.x requires the subscription ID to be available to the provider.
 az login
 export ARM_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
 
-terraform -chdir=infra/terraform init
-terraform -chdir=infra/terraform plan \
+terraform -chdir=infra/azure/terraform init
+terraform -chdir=infra/azure/terraform plan \
   -var-file=environments/dev/terraform.tfvars \
   -out=dev.tfplan
-terraform -chdir=infra/terraform apply dev.tfplan
+terraform -chdir=infra/azure/terraform apply dev.tfplan
 ```
 
 To preview public mode while `dev.tfvars` is set to private mode, override the
 switch:
 
 ```bash
-terraform -chdir=infra/terraform plan \
+terraform -chdir=infra/azure/terraform plan \
   -var-file=environments/dev/terraform.tfvars \
   -var='deployment_in_vnet=false'
 ```
@@ -167,11 +167,11 @@ plan, then apply that saved plan. The existing `nucleus_swec_dev-rg` resource
 group is a data source and is therefore not part of the destroy plan.
 
 ```bash
-terraform -chdir=infra/terraform plan \
+terraform -chdir=infra/azure/terraform plan \
   -destroy \
   -var-file=environments/dev/terraform.tfvars \
   -out=dev-destroy.tfplan
-terraform -chdir=infra/terraform apply dev-destroy.tfplan
+terraform -chdir=infra/azure/terraform apply dev-destroy.tfplan
 ```
 
 The current bootstrap uses local Terraform state. Do not commit state or plan

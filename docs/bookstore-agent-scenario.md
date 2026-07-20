@@ -12,7 +12,7 @@ The platform demonstrates:
 - MCP tool connectivity for most agents
 - One subagent with no tools
 - One Ollama-backed subagent for internet-backed release scouting
-- One Azure AI Search-backed subagent for review summarization
+- One configurable vector-search-backed subagent for review summarization
 - Master-to-subagent A2A communication
 - Database-backed read and write workflows
 - OpenAI-generated synthetic review data stored locally as JSONL and indexed unchunked
@@ -28,7 +28,7 @@ Use four MCP servers. This keeps the demo simple while still showing clear capab
 | Customer MCP | Customers, loyalty status, preferences | Keeps customer data isolated from product and store operations. |
 | Upcoming Releases MCP | Internet search for upcoming releases | Keeps external Tavily-backed web search separate from internal bookstore data. |
 
-Review Summarizer deliberately does not add a fifth MCP server in this round. It reads the local Postgres catalog to resolve book titles, then queries Azure AI Search directly for review documents in `srch-index-bookstore-dev`.
+Review Summarizer deliberately does not add a fifth MCP server in this round. It reads the local Postgres catalog to resolve book titles, then queries the backend selected by `BOOK_REVIEW_SEARCH_PROVIDER` for review documents.
 
 ## Agents
 
@@ -40,7 +40,7 @@ Review Summarizer deliberately does not add a fifth MCP server in this round. It
 | Reservation Specialist | Subagent | Yes | Store Operations MCP, Customer MCP | Creates, updates, cancels, and reviews reservations through approval-gated write flows; checks whether a customer has existing pickups or loyalty benefits. |
 | Message Drafter | Subagent | Yes | No tools | Turns supplied context into polished customer messages, staff briefings, pickup confirmations, or apology notes. |
 | Release Scout | Subagent | Yes | Upcoming Releases MCP | Searches for upcoming book releases by theme, genre, or author, then uses local Ollama `llama3.2:3b` to summarize source-backed leads. |
-| Review Summarizer | Subagent | Yes | No MCP tools; uses Azure AI Search directly | Resolves a book title, filters indexed reviews by normalized title metadata, retrieves top-k review documents, and summarizes what readers like or dislike. |
+| Review Summarizer | Subagent | Yes | No MCP tools; uses the configured vector-search backend directly | Resolves a book title, filters indexed reviews by normalized title metadata, retrieves top-k review documents, and summarizes what readers like or dislike. |
 
 ## Agent Descriptions
 
@@ -150,12 +150,16 @@ Example request:
 
 The Review Summarizer is an independently callable subagent for review questions. It is also called by Customer Concierge when the shopper asks what people like, dislike, or think about a specific catalog title.
 
-Review data is generated from the current Postgres `books` table with OpenAI, written to local JSONL, and uploaded unchunked to Azure AI Search. The agent retrieves only review documents that match the resolved book title metadata, then summarizes the retrieved evidence without inventing additional opinions.
+Review data is generated from the current Postgres `books` table with OpenAI,
+written to local JSONL, and uploaded unchunked to the configured Azure AI Search
+or OpenSearch backend. The agent retrieves only review documents that match the
+resolved book title metadata, then summarizes the retrieved evidence without
+inventing additional opinions.
 
 Typical responsibilities:
 
 - Resolve a requested book title against the local catalog
-- Query Azure AI Search index `srch-index-bookstore-dev`
+- Query the index configured for the selected vector-search provider
 - Filter reviews by `book_title_normalized`
 - Retrieve the configured top-k reviews, defaulting to 15
 - Summarize positive themes, negative themes, and sentiment balance
@@ -176,7 +180,7 @@ flowchart TD
   RS["Reservation Specialist\nSubagent"]
   MD["Message Drafter\nSubagent, no tools"]
   Scout["Release Scout\nSubagent, Ollama"]
-  Reviews["Review Summarizer\nSubagent, Azure AI Search"]
+  Reviews["Review Summarizer\nSubagent, vector search"]
 
   GW --> CC
   GW --> SM
@@ -219,7 +223,7 @@ flowchart LR
   DB[("PostgreSQL")]
   Tavily["Tavily Search API"]
   Ollama["Ollama llama3.2:3b"]
-  Search["Azure AI Search\nsrch-index-bookstore-dev"]
+  Search["Configured vector search\nAzure AI Search / OpenSearch"]
   JSONL["Local review JSONL\nignored generated artifact"]
   OpenAI["OpenAI\nreview generation + summarization"]
   Config["runtime config\n.env / bookstore-config"]
@@ -313,7 +317,7 @@ sequenceDiagram
   participant CC as Customer Concierge
   participant Reviews as Review Summarizer
   participant DB as PostgreSQL catalog
-  participant Search as Azure AI Search
+  participant Search as Configured vector search
   participant OpenAI as OpenAI
 
   User->>GW: Ask Customer Concierge about reader opinions
@@ -330,27 +334,32 @@ sequenceDiagram
   GW-->>User: What readers like and dislike
 ```
 
-## Review Data And Azure AI Search Setup
+## Review Data And Vector Search Setup
 
 Review data is generated locally from seeded Postgres catalog rows and uploaded
-to Azure AI Search. The generated JSONL file is local and ignored by Git. In
-Docker Compose and direct local runs, Azure AI Search values come from `.env`.
-In Kubernetes, `deploy-secret.sh` writes `AZURE_AI_SEARCH_ENDPOINT` plus the
-Azure AI Search keys into `bookstore-secrets`, while `bookstore-config` provides
-`AZURE_AI_SEARCH_INDEX_NAME` and `BOOK_REVIEW_SEARCH_TOP_K`.
+to the backend selected by `BOOK_REVIEW_SEARCH_PROVIDER`. The generated JSONL
+file is local and ignored by Git. Docker Compose and direct runs read either
+Azure AI Search or OpenSearch configuration from `.env`. Kubernetes provides
+the selected endpoint and credentials through its environment-specific ConfigMap
+and Secret resources.
 
 ```bash
 # Local review index preparation
 make reset-db
-docker compose run --rm bookstore-cli bookstore-ai-search rebuild
+docker compose run --rm bookstore-cli bookstore-vector-search rebuild
 
-# Or run each Azure AI Search step separately
-docker compose run --rm bookstore-cli bookstore-ai-search generate-reviews
-docker compose run --rm bookstore-cli bookstore-ai-search create-index
-docker compose run --rm bookstore-cli bookstore-ai-search upload-reviews
+# Or run each provider-neutral step separately
+docker compose run --rm bookstore-cli bookstore-vector-search generate-reviews
+docker compose run --rm bookstore-cli bookstore-vector-search create-index
+docker compose run --rm bookstore-cli bookstore-vector-search upload-reviews
 ```
 
-The index stores whole review paragraphs with searchable title, headline, author, genre, and review text fields. Metadata fields such as `book_title_normalized`, `book_id`, `isbn`, `genre`, `sentiment`, and `rating` are filterable or sortable as needed. No chunking or vector fields are used for reviews.
+Both provider mappings store whole review paragraphs with searchable title,
+headline, author, genre, and review text fields. Metadata such as
+`book_title_normalized`, `book_id`, `isbn`, `genre`, `sentiment`, and `rating`
+is filterable or sortable as appropriate. No chunking or embedding fields are
+currently used for reviews; `vector_search` is the provider-neutral integration
+boundary for adding those capabilities later.
 
 For Kubernetes deployments, create `.LOCAL_KEYS` with the secret values and use
 the deployment helper so config, secrets, model APIs, and the review summarizer
@@ -428,7 +437,9 @@ human approves the request through the frontend or gateway API.
 | Customer MCP | `update_customer_preferences` | Add or update customer reading preferences. |
 | Upcoming Releases MCP | `search_upcoming_book_releases` | Search the web for upcoming releases by author, theme, or genre. |
 
-Review Summarizer does not expose a FastMCP tool. Its internal retrieval step appears in the agent timeline as `search_book_reviews`, backed by Azure AI Search rather than an MCP server.
+Review Summarizer does not expose a FastMCP tool. Its internal retrieval step
+appears in the agent timeline as `search_book_reviews`, backed by the selected
+vector-search provider rather than an MCP server.
 
 ## Example Pickup Cancellation Flow
 

@@ -1,0 +1,131 @@
+langfuse:
+  replicas: 1
+  encryptionKey:
+    secretKeyRef:
+      name: langfuse-runtime-secrets
+      key: encryption-key
+  salt:
+    secretKeyRef:
+      name: langfuse-runtime-secrets
+      key: salt
+  nextauth:
+    url: http://localhost:3002
+    secret:
+      secretKeyRef:
+        name: langfuse-runtime-secrets
+        key: nextauth-secret
+  additionalEnvFrom:
+    - secretRef:
+        name: langfuse-database-url
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  web:
+    service:
+      type: ClusterIP
+      port: 3000
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+    pod:
+      additionalEnv:
+        - name: LANGFUSE_INIT_ORG_ID
+          value: bookstore-demo-org
+        - name: LANGFUSE_INIT_ORG_NAME
+          value: Bookstore Demo
+        - name: LANGFUSE_INIT_PROJECT_ID
+          value: bookstore-agents-demo
+        - name: LANGFUSE_INIT_PROJECT_NAME
+          value: Bookstore Agents
+        - name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: langfuse-runtime-secrets
+              key: init-project-public-key
+        - name: LANGFUSE_INIT_PROJECT_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: langfuse-runtime-secrets
+              key: init-project-secret-key
+        - name: LANGFUSE_INIT_USER_EMAIL
+          value: demo@bookstore.local
+        - name: LANGFUSE_INIT_USER_NAME
+          value: Bookstore Demo
+        - name: LANGFUSE_INIT_USER_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: langfuse-runtime-secrets
+              key: init-user-password
+  worker:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+postgresql:
+  deploy: false
+  host: psql-nucleus-dev-swec-001.postgres.database.azure.com
+  port: 5432
+  args: sslmode=require
+  auth:
+    username: nucleusadmin
+    database: langfuse
+    existingSecret: langfuse-runtime-secrets
+    secretKeys:
+      userPasswordKey: postgres-password
+      adminPasswordKey: postgres-password
+
+clickhouse:
+  replicaCount: 1
+  clusterEnabled: false
+  resourcesPreset: small
+  persistence:
+    size: 10Gi
+  auth:
+    username: default
+    existingSecret: langfuse-runtime-secrets
+    existingSecretKey: clickhouse-password
+  zookeeper:
+    enabled: false
+
+redis:
+  auth:
+    existingSecret: langfuse-runtime-secrets
+    existingSecretPasswordKey: redis-password
+  primary:
+    persistence:
+      size: 2Gi
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+s3:
+  persistence:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  auth:
+    existingSecret: langfuse-runtime-secrets
+    rootUserSecretKey: minio-root-user
+    rootPasswordSecretKey: minio-root-password

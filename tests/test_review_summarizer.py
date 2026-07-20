@@ -3,7 +3,7 @@ import pytest
 from bookstore_agents.agents.common.openai_runtime import OpenAITextRuntime
 from bookstore_agents.agents.common.runtime import AgentRuntime
 from bookstore_agents.agents.review_summarizer.agent import get_spec as review_summarizer_spec
-from bookstore_agents.azure_ai_search.catalog import BookRecord
+from bookstore_agents.vector_search.catalog import BookRecord
 
 
 def resolved_book() -> BookRecord:

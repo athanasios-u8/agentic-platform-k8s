@@ -1,6 +1,7 @@
 ---
 apiVersion: v1
 data:
+  BOOK_REVIEW_SEARCH_PROVIDER: azure_ai_search
   APPROVAL_REQUIRED_FOR_WRITES: 'true'
   APPROVAL_STATE_STORE: postgres
   AZURE_AI_SEARCH_INDEX_NAME: srch-index-bookstore-dev
@@ -21,7 +22,7 @@ data:
   MESSAGE_DRAFTER_AGENT_URL: http://agent-message-drafter:8000
   OBSERVABILITY_CAPTURE_CONTENT: 'true'
   OBSERVABILITY_CONTENT_MAX_CHARS: '6000'
-  OBSERVABILITY_ENABLED: 'false'
+  OBSERVABILITY_ENABLED: 'true'
   OLLAMA_API_KEY: ollama
   OLLAMA_BASE_URL: http://modelapi-llama3-2-3b:11434
   OLLAMA_MODEL: llama3.2:3b
